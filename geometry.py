@@ -26,6 +26,11 @@ def ic_x(y: float, u: float, alpha: float) -> float:
     return (u / (y ** (1.0 - alpha))) ** (1.0 / alpha)
 
 
+def ppf_point(a_x: float, a_y: float, t: float) -> tuple[float, float]:
+    """Point on the linear PPF: t=0 → (0, a_y) NW, t=1 → (a_x, 0) SE."""
+    return (t * a_x, (1.0 - t) * a_y)
+
+
 def budget_y(x: float, endowment: tuple[float, float], price_x: float) -> float:
     """Budget: p·x + y = p·ωx + ωy  ⇒  y = m - p·x."""
     m = price_x * endowment[0] + endowment[1]
