@@ -22,12 +22,12 @@ from manim import (
     smooth,
 )
 
-from geometry import EPS, clip_domain_for_ic, flip_to_a
-from style import AXIS_NUMBER_SIZE, AXIS_TITLE_SIZE, mono
+from geometry import EPS, clip_domain_for_ic, contract_point, flip_to_a
+from style import AXIS_NUMBER_SIZE, AXIS_TITLE_SIZE, DOT_COLOR, mono
 
 
 BUDGET_COLOR = "#E76F51"
-CONTRACT_COLOR = "#264653"
+CONTRACT_COLOR = DOT_COLOR  # brilliant green (same as allocation dot)
 ENDOWMENT_COLOR = WHITE
 TICK_SIZE = 0.08
 
@@ -516,3 +516,24 @@ class EdgeworthBox(VGroup):
 
     def allocation_dot(self, bundle_a: tuple[float, float], color: str = ENDOWMENT_COLOR):
         return Dot(self.c2p(*bundle_a), color=color, radius=0.08)
+
+    def plot_contract(
+        self,
+        t0: float = 0.0,
+        t1: float = 1.0,
+        *,
+        color: str = CONTRACT_COLOR,
+        stroke_width: float = 2,
+        n: int = 60,
+    ) -> VMobject:
+        """Segment of the contract curve (box diagonal for identical Cobb–Douglas)."""
+        t0 = max(0.0, min(1.0, t0))
+        t1 = max(0.0, min(1.0, t1))
+        if t1 <= t0 + EPS:
+            return VMobject()
+        ts = [t0 + (t1 - t0) * i / (n - 1) for i in range(n)]
+        curve = VMobject(color=color, stroke_width=stroke_width)
+        curve.set_points_smoothly(
+            [self.c2p(*contract_point(t, self.total_x, self.total_y)) for t in ts]
+        )
+        return curve

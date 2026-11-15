@@ -80,3 +80,31 @@ def clip_domain_for_ic(
         if EPS < y <= y_max * 1.001 and EPS < x <= x_max * 1.001:
             pts.append((x, min(y, y_max)))
     return pts
+
+
+def contract_point(t: float, total_x: float, total_y: float) -> tuple[float, float]:
+    """Point on the contract curve for identical Cobb–Douglas prefs: the box diagonal."""
+    return (t * total_x, t * total_y)
+
+
+def contract_lens_t_range(
+    endowment_a: tuple[float, float],
+    total_x: float,
+    total_y: float,
+    alpha: float,
+    *,
+    n: int = 400,
+) -> tuple[float, float]:
+    """t-interval on the contract curve that is preferred by both to ``endowment_a``."""
+    u_a0 = utility(*endowment_a, alpha)
+    u_b0 = utility(*flip_to_a(endowment_a, total_x, total_y), alpha)
+    inside: list[float] = []
+    for i in range(1, n):
+        t = i / n
+        xa, ya = contract_point(t, total_x, total_y)
+        xb, yb = total_x - xa, total_y - ya
+        if utility(xa, ya, alpha) + 1e-9 >= u_a0 and utility(xb, yb, alpha) + 1e-9 >= u_b0:
+            inside.append(t)
+    if not inside:
+        return (0.5, 0.5)
+    return (inside[0], inside[-1])
