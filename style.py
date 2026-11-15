@@ -17,6 +17,16 @@ for _ttf in (_FONTS_DIR / "RobotoMono-Regular.ttf", _FONTS_DIR / "RobotoMono-Med
 AXIS_TITLE_SIZE = 26
 AXIS_NUMBER_SIZE = 24
 NAME_SIZE = 32
+DOT_COLOR = "#76FF03"
+# Multiples of u_opt; stop at the optimum (never above).
+IC_LEVEL_FACTORS = (0.35, 0.55, 0.75, 0.90, 1.0)
+
+
+def grey_for_level(t: float) -> str:
+    """t in [0, 1]: 0 = dark grey, 1 = light grey (IC family)."""
+    t = max(0.0, min(1.0, t))
+    c = int(70 + t * (210 - 70))
+    return f"#{c:02x}{c:02x}{c:02x}"
 
 
 def mono(

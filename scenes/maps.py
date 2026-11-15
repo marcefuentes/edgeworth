@@ -27,11 +27,10 @@ from manim import (
 from data import get_economy
 from geometry import ppf_point, utility
 from mobjects import BUDGET_COLOR, LabeledAxes
-from style import mono, person_name
+from style import DOT_COLOR, IC_LEVEL_FACTORS, grey_for_level, mono, person_name
 
 
 PPF_COLOR = "#43A047"
-DOT_COLOR = "#76FF03"
 AUTARKY_AXIS_MAX = 8.0
 AUTARKY_SIZE = 5.5
 
@@ -47,13 +46,6 @@ def _stage_axis_max(stage, agent=None) -> tuple[float, float]:
         x_max = max(x_max, agent.a_x)
         y_max = max(y_max, agent.a_y)
     return x_max, y_max
-
-
-def _grey_for_level(t: float) -> str:
-    """t in [0, 1]: 0 = dark grey, 1 = light grey."""
-    t = max(0.0, min(1.0, t))
-    c = int(70 + t * (210 - 70))
-    return f"#{c:02x}{c:02x}{c:02x}"
 
 
 class _PersonStageMap(Scene):
@@ -84,7 +76,6 @@ class _PersonStageMap(Scene):
             eco.good_y,
             width=AUTARKY_SIZE,
             height=AUTARKY_SIZE,
-            tip_length=0.03,
         ).shift(LEFT * 0.6)
 
         def _w_label(u: float):
@@ -97,13 +88,13 @@ class _PersonStageMap(Scene):
 
         # --- 1) IC sweep: accumulate (low → high; darker → lighter) ---
         u_opt = utility(*optimum, eco.alpha)
-        u_levels = [u_opt * f for f in (0.35, 0.55, 0.75, 0.95, 1.15, 1.35, 1.55)]
+        u_levels = [u_opt * f for f in IC_LEVEL_FACTORS]
         u_lo, u_hi = u_levels[0], u_levels[-1]
         drawn = VGroup()
         w_lbl = None
         for u in u_levels:
             t = (u - u_lo) / (u_hi - u_lo)
-            curve = axes.plot_ic(u, eco.alpha, _grey_for_level(t), stroke_width=3)
+            curve = axes.plot_ic(u, eco.alpha, grey_for_level(t), stroke_width=3)
             new_w = _w_label(u)
             if w_lbl is None:
                 self.play(Write(curve), FadeIn(new_w), run_time=0.4)
@@ -130,7 +121,7 @@ class _PersonStageMap(Scene):
             u_corner = utility(*ppf_point(agent.a_x, agent.a_y, t_lo), eco.alpha)
             u = _u()
             t = 0.0 if u_opt <= u_corner else (u - u_corner) / (u_opt - u_corner + 1e-9)
-            return _grey_for_level(max(0.0, min(1.0, t)))
+            return grey_for_level(max(0.0, min(1.0, t)))
 
         budget = axes.ppf_line(agent.a_x, agent.a_y, color=PPF_COLOR)
         dot = always_redraw(
@@ -157,7 +148,7 @@ class _PersonStageMap(Scene):
 
         self.play(tracker.animate.set_value(t_opt), run_time=1.4, rate_func=linear)
 
-        final_ic = axes.plot_ic(u_opt, eco.alpha, _grey_for_level(1.0), stroke_width=3.5)
+        final_ic = axes.plot_ic(u_opt, eco.alpha, grey_for_level(1.0), stroke_width=3.5)
         final_dot = Dot(axes.c2p(*optimum), color=DOT_COLOR, radius=0.1)
         final_cursors = axes.cursor_ticks(*optimum, DOT_COLOR)
         final_w = _w_label(u_opt)

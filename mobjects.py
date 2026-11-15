@@ -12,9 +12,14 @@ from manim import (
     WHITE,
     Axes,
     Dot,
+    FadeIn,
+    FadeOut,
     Line,
+    ReplacementTransform,
+    Rotate,
     VGroup,
     VMobject,
+    smooth,
 )
 
 from geometry import EPS, clip_domain_for_ic, flip_to_a
@@ -58,6 +63,29 @@ def _edge_ticks(points_along_axis, outward, color, tick_size: float = TICK_SIZE)
     return ticks
 
 
+def _axis_number_labels(axes: Axes, x_max: float, y_max: float) -> VGroup:
+    labels = VGroup()
+    step_x = _tick_step(x_max)
+    step_y = _tick_step(y_max)
+    x = step_x
+    while x <= x_max + 1e-9:
+        labels.add(
+            mono(f"{x:g}", font_size=AXIS_NUMBER_SIZE, color=GREY_B).next_to(
+                axes.coords_to_point(x, 0), DOWN, buff=0.12
+            )
+        )
+        x += step_x
+    y = step_y
+    while y <= y_max + 1e-9:
+        labels.add(
+            mono(f"{y:g}", font_size=AXIS_NUMBER_SIZE, color=GREY_B).next_to(
+                axes.coords_to_point(0, y), LEFT, buff=0.12
+            )
+        )
+        y += step_y
+    return labels
+
+
 class LabeledAxes(VGroup):
     def __init__(
         self,
@@ -68,7 +96,6 @@ class LabeledAxes(VGroup):
         *,
         width: float = 5.5,
         height: float = 4.0,
-        tip_length: float = 0.03,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -83,11 +110,10 @@ class LabeledAxes(VGroup):
             y_length=height,
             axis_config={
                 "include_numbers": False,
-                "tip_length": tip_length,
                 "color": GREY_B,
                 "tick_size": TICK_SIZE,
             },
-            tips=True,
+            tips=False,
         )
         _set_outward_ticks(self.axes.x_axis, DOWN)
         _set_outward_ticks(self.axes.y_axis, LEFT)
@@ -197,28 +223,34 @@ class EdgeworthBox(VGroup):
         *,
         width: float = 5.5,
         height: float = None,
+        agent_b_at_final: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.total_x = total_x
         self.total_y = total_y
-        # Names kept for callers; drawn by scenes (upper-left), not on the box.
         self.agent_a_name = agent_a_name
         self.agent_b_name = agent_b_name
+        self.good_x = good_x
+        self.good_y = good_y
+        self._title_buff = 0.4
+        self._agent_b_at_final = agent_b_at_final
         if height is None:
             height = width * (total_y / total_x)
+        self._width = width
+        self._height = height
+
+        axis_cfg = {
+            "include_numbers": False,
+            "tick_size": TICK_SIZE,
+        }
         self.axes_a = Axes(
             x_range=[0, total_x, _tick_step(total_x)],
             y_range=[0, total_y, _tick_step(total_y)],
             x_length=width,
             y_length=height,
-            axis_config={
-                "include_numbers": False,
-                "tip_length": 0.03,
-                "color": color_a,
-                "tick_size": TICK_SIZE,
-            },
-            tips=True,
+            axis_config={**axis_cfg, "color": color_a},
+            tips=False,
         )
         _set_outward_ticks(self.axes_a.x_axis, DOWN)
         _set_outward_ticks(self.axes_a.y_axis, LEFT)
@@ -227,56 +259,193 @@ class EdgeworthBox(VGroup):
         br = self.axes_a.coords_to_point(total_x, 0)
         tl = self.axes_a.coords_to_point(0, total_y)
         tr = self.axes_a.coords_to_point(total_x, total_y)
+        self._bl, self._br, self._tl, self._tr = bl, br, tl, tr
+
         border = VMobject(color=GREY_B, stroke_width=2)
         border.set_points_as_corners([bl, br, tr, tl, bl])
 
-        xa = mono(good_x, font_size=AXIS_TITLE_SIZE, color=color_a).next_to(
-            br, DOWN, buff=0.35
-        )
-        ya = (
-            mono(good_y, font_size=AXIS_TITLE_SIZE, color=color_a)
-            .rotate(PI / 2)
-            .next_to(tl, LEFT, buff=0.4)
-        )
-        xb = mono(good_x, font_size=AXIS_TITLE_SIZE, color=color_b).next_to(
-            tl, UP, buff=0.2
-        )
-        yb = (
-            mono(good_y, font_size=AXIS_TITLE_SIZE, color=color_b)
-            .rotate(PI / 2)
-            .next_to(br, RIGHT, buff=0.35)
-        )
-
-        tip_b_x = Line(tr, tl, color=color_b, stroke_width=2)
-        tip_b_y = Line(tr, br, color=color_b, stroke_width=2)
-        b_x_pts = [
-            self.axes_a.coords_to_point(x, total_y)
-            for x in self.axes_a.x_axis.get_tick_range()
-            if x > 0
-        ]
-        b_y_pts = [
-            self.axes_a.coords_to_point(total_x, y)
-            for y in self.axes_a.y_axis.get_tick_range()
-            if y > 0
-        ]
-        ticks_b_x = _edge_ticks(b_x_pts, UP, color_b)
-        ticks_b_y = _edge_ticks(b_y_pts, RIGHT, color_b)
+        # Agent A titles + numbers (always final SW orientation)
+        xa = mono(good_x, font_size=AXIS_TITLE_SIZE, color=color_a)
+        xa.next_to(bl, DOWN, buff=self._title_buff)
+        xa.shift(RIGHT * (xa.width / 2 + 0.08))
+        ya = mono(good_y, font_size=AXIS_TITLE_SIZE, color=color_a).rotate(PI / 2)
+        ya.next_to(bl, LEFT, buff=self._title_buff)
+        ya.shift(UP * (ya.height / 2 + 0.08))
+        labels_a = _axis_number_labels(self.axes_a, total_x, total_y)
 
         self.color_a = color_a
         self.color_b = color_b
-        self.add(
-            border,
-            self.axes_a,
-            tip_b_x,
-            tip_b_y,
-            ticks_b_x,
-            ticks_b_y,
-            xa,
-            ya,
-            xb,
-            yb,
-            _axis_number_labels(self.axes_a, total_x, total_y),
+        self.chrome_a = VGroup(self.axes_a, xa, ya, labels_a)
+        self.border = border
+
+        # Agent B: either already at NE, or starting as a normal SW chart to rotate in.
+        self.b_geom, self.b_labels_sw, self.b_labels_ne = self._build_agent_b_parts(
+            color_b
         )
+        if agent_b_at_final:
+            self.chrome_b = VGroup(self.b_geom, self.b_labels_ne)
+            self.add(border, self.chrome_a, self.chrome_b)
+        else:
+            # Start in SW orientation (0 at SW); NE labels ready for after rotation.
+            self.b_labels_ne.set_opacity(0)
+            self.chrome_b = VGroup(self.b_geom, self.b_labels_sw)
+            self.add(border, self.chrome_a, self.chrome_b, self.b_labels_ne)
+
+    def _tick_values(self, span: float) -> list[float]:
+        step = _tick_step(span)
+        vals = []
+        v = step
+        while v <= span + 1e-9:
+            vals.append(v)
+            v += step
+        return vals
+
+    def _corner(self, x: float, y: float):
+        """Live box corner in scene coords (safe after shifts)."""
+        return self.axes_a.coords_to_point(x, y)
+
+    def _axis_line(self, start, end, color: str) -> Line:
+        return Line(start, end, color=color, stroke_width=2)
+
+    def _make_b_sw_geom(self, color_b: str) -> VGroup:
+        """Bottom+left axes for agent B in standard SW orientation, on the box edges."""
+        bl = self._corner(0, 0)
+        br = self._corner(self.total_x, 0)
+        tl = self._corner(0, self.total_y)
+        x_axis = self._axis_line(bl, br, color_b)
+        y_axis = self._axis_line(bl, tl, color_b)
+        x_ticks = _edge_ticks(
+            [self._corner(x, 0) for x in self._tick_values(self.total_x)],
+            DOWN,
+            color_b,
+        )
+        y_ticks = _edge_ticks(
+            [self._corner(0, y) for y in self._tick_values(self.total_y)],
+            LEFT,
+            color_b,
+        )
+        return VGroup(x_axis, y_axis, x_ticks, y_ticks)
+
+    def _make_b_ne_geom(self, color_b: str) -> VGroup:
+        """Top+right axes for agent B in final Edgeworth orientation, on the box edges."""
+        tr = self._corner(self.total_x, self.total_y)
+        tl = self._corner(0, self.total_y)
+        br = self._corner(self.total_x, 0)
+        x_axis = self._axis_line(tr, tl, color_b)  # B's x increases leftward
+        y_axis = self._axis_line(tr, br, color_b)  # B's y increases downward
+        x_ticks = _edge_ticks(
+            [
+                self._corner(self.total_x - bx, self.total_y)
+                for bx in self._tick_values(self.total_x)
+            ],
+            UP,
+            color_b,
+        )
+        y_ticks = _edge_ticks(
+            [
+                self._corner(self.total_x, self.total_y - by)
+                for by in self._tick_values(self.total_y)
+            ],
+            RIGHT,
+            color_b,
+        )
+        return VGroup(x_axis, y_axis, x_ticks, y_ticks)
+
+    def _build_agent_b_parts(self, color_b: str):
+        """Geometry + SW labels + NE labels for agent B."""
+        total_x, total_y = self.total_x, self.total_y
+        title_buff = self._title_buff
+        bl = self._corner(0, 0)
+        tr = self._corner(total_x, total_y)
+
+        b_geom = (
+            self._make_b_ne_geom(color_b)
+            if self._agent_b_at_final
+            else self._make_b_sw_geom(color_b)
+        )
+
+        # --- SW labels (readable in standard orientation) ---
+        xb_sw = mono(self.good_x, font_size=AXIS_TITLE_SIZE, color=color_b)
+        xb_sw.next_to(bl, DOWN, buff=title_buff)
+        xb_sw.shift(RIGHT * (xb_sw.width / 2 + 0.08))
+        yb_sw = mono(self.good_y, font_size=AXIS_TITLE_SIZE, color=color_b).rotate(
+            PI / 2
+        )
+        yb_sw.next_to(bl, LEFT, buff=title_buff)
+        yb_sw.shift(UP * (yb_sw.height / 2 + 0.08))
+        labels_sw = VGroup()
+        for x in self._tick_values(total_x):
+            labels_sw.add(
+                mono(f"{x:g}", font_size=AXIS_NUMBER_SIZE, color=color_b).next_to(
+                    self._corner(x, 0), DOWN, buff=0.12
+                )
+            )
+        for y in self._tick_values(total_y):
+            labels_sw.add(
+                mono(f"{y:g}", font_size=AXIS_NUMBER_SIZE, color=color_b).next_to(
+                    self._corner(0, y), LEFT, buff=0.12
+                )
+            )
+        b_labels_sw = VGroup(xb_sw, yb_sw, labels_sw)
+
+        # --- NE labels (final Edgeworth orientation) ---
+        xb_ne = mono(self.good_x, font_size=AXIS_TITLE_SIZE, color=color_b)
+        xb_ne.next_to(tr, UP, buff=title_buff)
+        xb_ne.shift(LEFT * (xb_ne.width / 2 + 0.08))
+        yb_ne = mono(self.good_y, font_size=AXIS_TITLE_SIZE, color=color_b).rotate(
+            -PI / 2
+        )
+        yb_ne.next_to(tr, RIGHT, buff=title_buff)
+        yb_ne.shift(DOWN * (yb_ne.height / 2 + 0.08))
+        labels_ne = VGroup()
+        for bx in self._tick_values(total_x):
+            pt = self._corner(total_x - bx, total_y)
+            labels_ne.add(
+                mono(f"{bx:g}", font_size=AXIS_NUMBER_SIZE, color=color_b).next_to(
+                    pt, UP, buff=0.12
+                )
+            )
+        for by in self._tick_values(total_y):
+            pt = self._corner(total_x, total_y - by)
+            labels_ne.add(
+                mono(f"{by:g}", font_size=AXIS_NUMBER_SIZE, color=color_b).next_to(
+                    pt, RIGHT, buff=0.12
+                )
+            )
+        b_labels_ne = VGroup(xb_ne, yb_ne, labels_ne)
+
+        return b_geom, b_labels_sw, b_labels_ne
+
+    def play_rotate_b_into_box(
+        self, scene, *extras, run_time: float = 2.5
+    ) -> None:
+        """Animate agent B's axes from SW orientation into the NE Edgeworth corner.
+
+        Any *extras (e.g. B's SW optimum dot) rotate about the same center.
+        """
+        if self._agent_b_at_final:
+            return
+        # Geometric box center (not Axes.get_center — tips/ticks bias that).
+        center = self.axes_a.coords_to_point(self.total_x / 2, self.total_y / 2)
+        # Corner-based SW arrows rotate onto the box's top/right edges exactly.
+        anims = [
+            Rotate(self.b_geom, PI, about_point=center),
+            FadeOut(self.b_labels_sw),
+        ]
+        for m in extras:
+            anims.append(Rotate(m, PI, about_point=center))
+        scene.play(*anims, run_time=run_time, rate_func=smooth)
+        # Settle onto canonical NE geom (identical edges) + final labels.
+        ne_geom = self._make_b_ne_geom(self.color_b)
+        self.b_labels_ne.set_opacity(1)
+        scene.play(
+            ReplacementTransform(self.b_geom, ne_geom),
+            FadeIn(self.b_labels_ne),
+            run_time=0.3,
+        )
+        self.b_geom = ne_geom
+        self.chrome_b = VGroup(self.b_geom, self.b_labels_ne)
+        self._agent_b_at_final = True
 
     def c2p(self, x: float, y: float):
         return self.axes_a.coords_to_point(x, y)
@@ -289,8 +458,17 @@ class EdgeworthBox(VGroup):
         curve.set_points_smoothly([self.c2p(x, y) for x, y in pts])
         return curve
 
+    def plot_ic_b_sw(self, u: float, alpha: float, stroke_width: float = 3):
+        """IC for B in SW (own-goods) orientation — rotate into the box with B's axes."""
+        pts = clip_domain_for_ic(u, alpha, self.total_x, self.total_y)
+        if len(pts) < 2:
+            return VMobject()
+        curve = VMobject(color=self.color_b, stroke_width=stroke_width)
+        curve.set_points_smoothly([self.c2p(x, y) for x, y in pts])
+        return curve
+
     def plot_ic_b(self, u: float, alpha: float, stroke_width: float = 3):
-        """IC for B, drawn in A-coordinates."""
+        """IC for B, drawn in final Edgeworth (A) coordinates."""
         pts_b = clip_domain_for_ic(u, alpha, self.total_x, self.total_y)
         if len(pts_b) < 2:
             return VMobject()
