@@ -64,7 +64,10 @@ class FullNarrative(_PersonStageMap):
 
         # Shrink map axes about SW to the autarky box (8×6 → 6×4), like the
         # inverse of exchange→specialization grow. Shared ticks at 2/4/6 stay put.
-        # Keep Iván's optimum IC + green dot; only Iván's name at the box open.
+        # Morph Iván's optimum IC with the shrink; keep the green dot; only his name.
+        u_b = utility(*stage.consume_b, eco.alpha)
+        ic_box = box.plot_ic_b_sw(u_b, eco.alpha, stroke_width=3.5)
+        ic_box.set_stroke(color=grey_for_level(1.0))
         axes.play_shrink_to(
             self,
             stage.total_x,
@@ -73,6 +76,7 @@ class FullNarrative(_PersonStageMap):
                 FadeOut(map_state["budget"]),
                 FadeOut(map_state["cursors"]),
                 ReplacementTransform(ivan_name, name_b),
+                ReplacementTransform(map_state["ic"], ic_box),
                 dot.animate.move_to(target),
             ),
             run_time=1.4,
@@ -91,7 +95,7 @@ class FullNarrative(_PersonStageMap):
             name_b,
             intro="resume",
             existing_dot=dot,
-            existing_ic=map_state["ic"],
+            existing_ic=ic_box,
         )
         return name_a, name_b, box, dot
 
@@ -177,6 +181,7 @@ class FullNarrative(_PersonStageMap):
             run_time=1.6,
         )
         eq.move_to(box_new.c2p(ox, oy))
+        self.bring_to_front(eq)
         return box_new, autarky_a_new, autarky_b_new, eq, ic_ex_a, ic_ex_b
 
     def _specialization_box(

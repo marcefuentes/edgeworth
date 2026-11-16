@@ -9,7 +9,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from manim import (
-    Dot,
     FadeIn,
     FadeOut,
     ReplacementTransform,
@@ -26,8 +25,9 @@ from geometry import EPS, contract_lens_t_range, utility
 from layout import chart_size, pin_sw
 from mobjects import CONTRACT_COLOR, EdgeworthBox
 from style import (
-    DOT_COLOR,
+    DOT_Z_INDEX,
     IC_LEVEL_FACTORS,
+    allocation_dot,
     grey_for_level,
     person_name,
     person_name_stacked,
@@ -167,9 +167,10 @@ def _play_dot_ic_move(
     live_b = always_redraw(_live_b)
     cursors = always_redraw(lambda: box.cursor_ticks(*_bundle()))
     eq.clear_updaters()
+    eq.set_z_index(DOT_Z_INDEX)
     eq.add_updater(lambda m: m.move_to(box.c2p(*_bundle())))
     scene.add(live_a, live_b, cursors)
-    scene.bring_to_front(live_a, live_b, eq, cursors)
+    scene.bring_to_front(live_a, live_b, cursors, eq)
     anims = [progress.animate.set_value(1.0)]
     anims.extend(FadeOut(m) for m in fade_out)
     scene.play(*anims, run_time=run_time)
@@ -192,7 +193,7 @@ def _play_dot_ic_move(
     ic_b.set_stroke(color=ic_hi)
     final_cursors = box.cursor_ticks(*end)
     scene.add(ic_a, ic_b, final_cursors)
-    scene.bring_to_front(ic_a, ic_b, eq, final_cursors)
+    scene.bring_to_front(ic_a, ic_b, final_cursors, eq)
     scene.remove(live_a, live_b, cursors)
     return ic_a, ic_b
 
@@ -250,12 +251,14 @@ def _play_endowment_trade(
         if endowment_arts is None:
             raise ValueError("endowment_arts (eq) required for intro='after_corner'")
         eq = endowment_arts
+        eq.set_z_index(DOT_Z_INDEX)
     elif intro == "after_endowment":
         if endowment_arts is None:
             raise ValueError("endowment_arts required for intro='after_endowment'")
         ic_a0, ic_b0, eq = endowment_arts
+        eq.set_z_index(DOT_Z_INDEX)
     else:
-        eq = Dot(box.c2p(*endow), color=DOT_COLOR, radius=0.1)
+        eq = allocation_dot(box.c2p(*endow))
         if not skip_endowment_ics:
             ic_a0 = box.plot_ic_a(u_a0, eco.alpha, stroke_width=3.5)
             ic_b0 = box.plot_ic_b(u_b0, eco.alpha, stroke_width=3.5)
@@ -288,6 +291,7 @@ def _play_endowment_trade(
         0.0, 1.0, color=CONTRACT_COLOR, stroke_width=1.5
     )
     scene.play(Write(contract_thin), run_time=1.2)
+    scene.bring_to_front(eq)
     scene.wait(0.3)
 
     lens_kw = {}
@@ -300,6 +304,7 @@ def _play_endowment_trade(
         t_lo, t_hi, color=CONTRACT_COLOR, stroke_width=5.5
     )
     scene.play(Write(contract_thick), run_time=0.9)
+    scene.bring_to_front(eq)
     scene.wait(0.35)
 
     fade_out = ()
@@ -347,9 +352,10 @@ def _play_autarky_box(
     # Dot starts on Iván's SW chart at his optimum; 180° rotation lands it
     # on the final Edgeworth allocation (consume_a).
     if existing_dot is None:
-        eq = Dot(box.c2p(*stage.consume_b), color=DOT_COLOR, radius=0.1)
+        eq = allocation_dot(box.c2p(*stage.consume_b))
     else:
         eq = existing_dot
+        eq.set_z_index(DOT_Z_INDEX)
         eq.move_to(box.c2p(*stage.consume_b))
 
     if intro == "together":
@@ -372,10 +378,8 @@ def _play_autarky_box(
     scene.wait(0.4)
 
     if existing_ic is not None:
-        # Map already left the optimum IC; snap to SW box geometry, skip the sweep.
-        opt_b = box.plot_ic_b_sw(u_b, eco.alpha, stroke_width=3.5)
-        opt_b.set_stroke(color=grey_for_level(1.0))
-        scene.play(ReplacementTransform(existing_ic, opt_b), run_time=0.45)
+        # Map→box shrink already morphed the optimum IC onto SW box geometry.
+        opt_b = existing_ic
     else:
         # --- Iván ICs on his SW chart, then keep only the optimum ---
         levels_b = _ic_levels(u_b)
@@ -385,10 +389,12 @@ def _play_autarky_box(
             curve = box.plot_ic_b_sw(u, eco.alpha, stroke_width=3)
             curve.set_stroke(color=grey_for_level(t))
             scene.play(Write(curve), run_time=0.4)
+            scene.bring_to_front(eq)
             drawn_b.add(curve)
         opt_b = drawn_b[-1]
         lower_b = VGroup(*drawn_b[:-1])
         scene.play(FadeOut(lower_b), opt_b.animate.set_stroke(width=3.5), run_time=0.6)
+        scene.bring_to_front(eq)
 
     # Drop Gonzalo before the rotate so dimmed SW axes don't close a faint
     # empty rectangle once Iván reaches NE; he returns on his focus beat.
@@ -396,12 +402,14 @@ def _play_autarky_box(
     # Rotate Iván's axes + optimum IC + dot into the NE Edgeworth corner
     box.play_rotate_b_into_box(scene, eq, opt_b, run_time=2.5)
     eq.move_to(box.c2p(*stage.consume_a))
+    scene.bring_to_front(eq)
     # Snap IC to exact Edgeworth geometry after the rotate.
     final_b = box.plot_ic_b(u_b, eco.alpha, stroke_width=3.5)
     final_b.set_stroke(color=opt_b.get_stroke_color())
     scene.remove(opt_b)
     scene.add(final_b)
     opt_b = final_b
+    scene.bring_to_front(eq)
 
     # Focus Gonzalo: dim Iván; attach Gonzalo's SW axes (box completes) + name.
     scene.play(
@@ -420,10 +428,12 @@ def _play_autarky_box(
         curve = box.plot_ic_a(u, eco.alpha, stroke_width=3)
         curve.set_stroke(color=grey_for_level(t))
         scene.play(Write(curve), run_time=0.4)
+        scene.bring_to_front(eq)
         drawn_a.add(curve)
     opt_a = drawn_a[-1]
     lower_a = VGroup(*drawn_a[:-1])
     scene.play(FadeOut(lower_a), opt_a.animate.set_stroke(width=3.5), run_time=0.6)
+    scene.bring_to_front(eq)
 
     # Restore both agents (green dot already sits at the shared optimum)
     scene.play(

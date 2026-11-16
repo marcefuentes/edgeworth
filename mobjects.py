@@ -191,34 +191,48 @@ class LabeledAxes(VGroup):
         y_axis = self.axes.y_axis
         x_ticks = x_axis.ticks
         y_ticks = y_axis.ticks
+        x_vals = list(x_axis.get_tick_range())
+        y_vals = list(y_axis.get_tick_range())
+
+        # Collect outer marks in place — do NOT reparent into an off-scene VGroup
+        # (that removes them from the scene, then FadeOut pops them back = flash).
+        outer: list = []
+        for tick, val in zip(list(x_ticks), x_vals):
+            if val > target_x + 1e-9:
+                outer.append(tick)
+        for tick, val in zip(list(y_ticks), y_vals):
+            if val > target_y + 1e-9:
+                outer.append(tick)
+        for label, val in zip(list(self.x_numbers), self.x_number_vals):
+            if val > target_x + 1e-9:
+                outer.append(label)
+        for label, val in zip(list(self.y_numbers), self.y_number_vals):
+            if val > target_y + 1e-9:
+                outer.append(label)
+
+        # Detach ticks so lengthening/shortening the NumberLines cannot move them.
         x_axis.remove(x_ticks)
         y_axis.remove(y_ticks)
         scene.add(x_ticks, y_ticks)
-
-        x_vals = list(x_axis.get_tick_range())
-        y_vals = list(y_axis.get_tick_range())
-        outer = VGroup()
-        for tick, val in zip(x_ticks, x_vals):
-            if val > target_x + 1e-9:
-                outer.add(tick)
-        for tick, val in zip(y_ticks, y_vals):
-            if val > target_y + 1e-9:
-                outer.add(tick)
-        for label, val in zip(self.x_numbers, self.x_number_vals):
-            if val > target_x + 1e-9:
-                outer.add(label)
-        for label, val in zip(self.y_numbers, self.y_number_vals):
-            if val > target_y + 1e-9:
-                outer.add(label)
 
         anims = [
             x_axis.animate.put_start_and_end_on(sw, new_br),
             y_axis.animate.put_start_and_end_on(sw, new_tl),
         ]
-        if len(outer) > 0:
-            anims.append(FadeOut(outer))
+        # One FadeOut per mark so we never wrap them in a fresh off-scene VGroup.
+        anims.extend(FadeOut(m) for m in outer)
         anims.extend(extra_anims)
         scene.play(*anims, run_time=run_time)
+
+        for m in outer:
+            if m in x_ticks.submobjects:
+                x_ticks.remove(m)
+            if m in y_ticks.submobjects:
+                y_ticks.remove(m)
+            if m in self.x_numbers.submobjects:
+                self.x_numbers.remove(m)
+            if m in self.y_numbers.submobjects:
+                self.y_numbers.remove(m)
         # Reattach kept ticks so a later FadeOut(self) does not leave orphans
         # sitting on the SW edge (they look like Iván's ticks "left behind").
         scene.remove(x_ticks, y_ticks)

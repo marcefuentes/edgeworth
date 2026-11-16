@@ -26,8 +26,9 @@ from geometry import EPS, ppf_point, utility
 from layout import chart_size, pin_sw
 from mobjects import BUDGET_COLOR, LabeledAxes
 from style import (
-    DOT_COLOR,
+    DOT_Z_INDEX,
     IC_LEVEL_FACTORS,
+    allocation_dot,
     grey_for_level,
     person_name,
     person_name_stacked,
@@ -147,10 +148,11 @@ class _PersonStageMap(Scene):
         )
         start = axes.c2p(*_bundle())
         if existing_dot is None:
-            dot = Dot(start, color=DOT_COLOR, radius=0.1)
+            dot = allocation_dot(start)
             new_dot = True
         else:
             dot = existing_dot
+            dot.set_z_index(DOT_Z_INDEX)
             new_dot = False
         # Cursor ticks match axis chrome (agent color), not the green dot.
         axes.color = agent.color
@@ -166,6 +168,7 @@ class _PersonStageMap(Scene):
             intro.append(dot.animate.move_to(start))
         intro.append(FadeIn(cursors))
         self.play(*intro)
+        self.bring_to_front(dot)
 
         dot.add_updater(lambda m: m.move_to(axes.c2p(*_bundle())))
 
@@ -177,6 +180,7 @@ class _PersonStageMap(Scene):
             lambda: axes.plot_ic(_u(), eco.alpha, _ic_color(), stroke_width=3)
         )
         self.add(live_ic)
+        self.bring_to_front(live_ic, cursors, dot)
         # One full PPF pass with the live IC, then settle on the optimum.
         first = [tracker.animate.set_value(t_hi)]
         if existing_ic is not None:
@@ -197,6 +201,7 @@ class _PersonStageMap(Scene):
             dot.animate.move_to(axes.c2p(*optimum)),
             run_time=0.5,
         )
+        self.bring_to_front(final_ic, final_cursors, dot)
         self.wait(1.2)
         return budget, final_ic, dot, final_cursors
 
@@ -298,6 +303,7 @@ class _PersonStageMap(Scene):
 
         live_handoff = always_redraw(_handoff_ic)
         dot.clear_updaters()
+        dot.set_z_index(DOT_Z_INDEX)
         dot.add_updater(lambda m: m.move_to(axes.c2p(*_handoff_bundle())))
         self.add(live_handoff)
         self.bring_to_front(live_handoff, dot)

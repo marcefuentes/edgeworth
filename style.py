@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import manimpango
-from manim import DOWN, LEFT, Text, UL
+from manim import DOWN, Dot, LEFT, Text, UL
 
 _FONTS_DIR = Path(__file__).resolve().parent / "assets" / "fonts"
 FONT = "Roboto Mono"
@@ -19,6 +19,13 @@ AXIS_NUMBER_SIZE = 24
 NAME_SIZE = 32
 NAME_STACK_BUFF = 0.12
 DOT_COLOR = "#76FF03"
+# Above ICs / contract curves (default z_index 0) for the whole narrative.
+DOT_Z_INDEX = 10
+
+
+def allocation_dot(point, *, radius: float = 0.1) -> Dot:
+    """Green allocation marker; always drawn above ICs and contract curves."""
+    return Dot(point, color=DOT_COLOR, radius=radius).set_z_index(DOT_Z_INDEX)
 # Multiples of u_opt; stop at the optimum (never above).
 IC_LEVEL_FACTORS = (0.35, 0.55, 0.75, 0.90, 1.0)
 
