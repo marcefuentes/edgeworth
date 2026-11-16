@@ -540,6 +540,27 @@ class EdgeworthBox(VGroup):
     def c2p(self, x: float, y: float):
         return self.axes_a.coords_to_point(x, y)
 
+    def cursor_ticks(
+        self,
+        x: float,
+        y: float,
+        color,
+        *,
+        tick_size: float = TICK_SIZE * 1.75,
+        stroke_width: float = 4,
+    ) -> VGroup:
+        """Outward green ticks on A (SW) and B (NE) axes at allocation (x, y)."""
+        pa_x = self.c2p(x, 0)
+        pa_y = self.c2p(0, y)
+        pb_x = self.c2p(x, self.total_y)  # B's x on the top edge
+        pb_y = self.c2p(self.total_x, y)  # B's y on the right edge
+        return VGroup(
+            Line(pa_x, pa_x + DOWN * tick_size, color=color, stroke_width=stroke_width),
+            Line(pa_y, pa_y + LEFT * tick_size, color=color, stroke_width=stroke_width),
+            Line(pb_x, pb_x + UP * tick_size, color=color, stroke_width=stroke_width),
+            Line(pb_y, pb_y + RIGHT * tick_size, color=color, stroke_width=stroke_width),
+        )
+
     def plot_ic_a(self, u: float, alpha: float, stroke_width: float = 3):
         pts = clip_domain_for_ic(u, alpha, self.total_x, self.total_y)
         if len(pts) < 2:
