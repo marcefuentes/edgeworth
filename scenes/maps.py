@@ -93,6 +93,7 @@ class _PersonStageMap(Scene):
     def _recolor_map_frame(self, axes, name, agent, *, stacked: bool = False):
         """Swap person name + axis chrome color; keep geometry and ICs in place."""
         new_name = self._agent_name(agent, stacked=stacked)
+        axes.color = agent.color
         self.play(
             FadeOut(name),
             FadeIn(new_name),
@@ -132,8 +133,10 @@ class _PersonStageMap(Scene):
         dot = always_redraw(
             lambda: Dot(axes.c2p(*_bundle()), color=DOT_COLOR, radius=0.1)
         )
+        # Cursor ticks match axis chrome (agent color), not the green dot.
+        axes.color = agent.color
         cursors = always_redraw(
-            lambda: axes.cursor_ticks(*_bundle(), DOT_COLOR)
+            lambda: axes.cursor_ticks(*_bundle(), agent.color)
         )
         self.play(Write(budget), FadeIn(dot), FadeIn(cursors))
 
@@ -153,7 +156,7 @@ class _PersonStageMap(Scene):
 
         final_ic = axes.plot_ic(u_opt, eco.alpha, grey_for_level(1.0), stroke_width=3.5)
         final_dot = Dot(axes.c2p(*optimum), color=DOT_COLOR, radius=0.1)
-        final_cursors = axes.cursor_ticks(*optimum, DOT_COLOR)
+        final_cursors = axes.cursor_ticks(*optimum, agent.color)
         self.play(
             FadeOut(live_ic),
             FadeOut(dot),

@@ -227,7 +227,7 @@ def _play_endowment_trade(
 
     live_a = always_redraw(_live_a)
     live_b = always_redraw(_live_b)
-    cursors = always_redraw(lambda: box.cursor_ticks(*_bundle(), DOT_COLOR))
+    cursors = always_redraw(lambda: box.cursor_ticks(*_bundle()))
     eq.add_updater(lambda m: m.move_to(box.c2p(*_bundle())))
 
     if ic_a0 is not None:
@@ -245,7 +245,7 @@ def _play_endowment_trade(
     ic_b1 = box.plot_ic_b(u_b1, eco.alpha, stroke_width=3.5)
     ic_a1.set_stroke(color=ic_hi)
     ic_b1.set_stroke(color=ic_hi)
-    final_cursors = box.cursor_ticks(*stage.consume_a, DOT_COLOR)
+    final_cursors = box.cursor_ticks(*stage.consume_a)
     eq.move_to(box.c2p(*stage.consume_a))
     scene.add(ic_a1, ic_b1, final_cursors)
     scene.wait(2)

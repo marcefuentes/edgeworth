@@ -111,6 +111,7 @@ class LabeledAxes(VGroup):
         super().__init__(**kwargs)
         self.x_max = x_max
         self.y_max = y_max
+        self.color = color
         self._step_x = _tick_step(x_max)
         self._step_y = _tick_step(y_max)
         self.axes = Axes(
@@ -163,17 +164,21 @@ class LabeledAxes(VGroup):
         self,
         x: float,
         y: float,
-        color,
+        color=None,
         *,
         tick_size: float = TICK_SIZE * 1.75,
         stroke_width: float = 4,
     ) -> VGroup:
-        """Outward green ticks on each axis at the projection of (x, y)."""
+        """Outward ticks on each axis at the projection of (x, y).
+
+        Defaults to this chart's axis chrome color.
+        """
+        c = self.color if color is None else color
         px = self.c2p(x, 0)
         py = self.c2p(0, y)
         return VGroup(
-            Line(px, px + DOWN * tick_size, color=color, stroke_width=stroke_width),
-            Line(py, py + LEFT * tick_size, color=color, stroke_width=stroke_width),
+            Line(px, px + DOWN * tick_size, color=c, stroke_width=stroke_width),
+            Line(py, py + LEFT * tick_size, color=c, stroke_width=stroke_width),
         )
 
     def plot_ic(self, u: float, alpha: float, color: str, stroke_width: float = 3):
@@ -544,21 +549,27 @@ class EdgeworthBox(VGroup):
         self,
         x: float,
         y: float,
-        color,
+        color_a=None,
+        color_b=None,
         *,
         tick_size: float = TICK_SIZE * 1.75,
         stroke_width: float = 4,
     ) -> VGroup:
-        """Outward green ticks on A (SW) and B (NE) axes at allocation (x, y)."""
+        """Outward ticks on A (SW) and B (NE) axes at allocation (x, y).
+
+        Defaults to each agent's axis chrome color.
+        """
+        ca = self.color_a if color_a is None else color_a
+        cb = self.color_b if color_b is None else color_b
         pa_x = self.c2p(x, 0)
         pa_y = self.c2p(0, y)
         pb_x = self.c2p(x, self.total_y)  # B's x on the top edge
         pb_y = self.c2p(self.total_x, y)  # B's y on the right edge
         return VGroup(
-            Line(pa_x, pa_x + DOWN * tick_size, color=color, stroke_width=stroke_width),
-            Line(pa_y, pa_y + LEFT * tick_size, color=color, stroke_width=stroke_width),
-            Line(pb_x, pb_x + UP * tick_size, color=color, stroke_width=stroke_width),
-            Line(pb_y, pb_y + RIGHT * tick_size, color=color, stroke_width=stroke_width),
+            Line(pa_x, pa_x + DOWN * tick_size, color=ca, stroke_width=stroke_width),
+            Line(pa_y, pa_y + LEFT * tick_size, color=ca, stroke_width=stroke_width),
+            Line(pb_x, pb_x + UP * tick_size, color=cb, stroke_width=stroke_width),
+            Line(pb_y, pb_y + RIGHT * tick_size, color=cb, stroke_width=stroke_width),
         )
 
     def plot_ic_a(self, u: float, alpha: float, stroke_width: float = 3):
