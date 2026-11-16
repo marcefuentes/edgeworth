@@ -12,6 +12,7 @@ from manim import (
     Dot,
     FadeIn,
     FadeOut,
+    ReplacementTransform,
     Scene,
     ValueTracker,
     VGroup,
@@ -110,8 +111,13 @@ class _PersonStageMap(Scene):
         eco,
         *,
         bare_pass: bool,
+        existing_budget=None,
     ):
-        """PPF + green dot (+ optional bare pass), then live ICs, then settle."""
+        """PPF + green dot (+ optional bare pass), then live ICs, then settle.
+
+        ``existing_budget``: if set, keep that line (already morphed to this
+        agent's PPF) and only introduce the dot/cursors.
+        """
         u_opt = utility(*optimum, eco.alpha)
         t_lo, t_hi = 0.08, 0.92
         t_opt = max(t_lo, min(t_hi, optimum[0] / agent.a_x if agent.a_x else t_lo))
@@ -129,7 +135,11 @@ class _PersonStageMap(Scene):
             t = 0.0 if u_opt <= u_corner else (u - u_corner) / (u_opt - u_corner + 1e-9)
             return grey_for_level(max(0.0, min(1.0, t)))
 
-        budget = axes.ppf_line(agent.a_x, agent.a_y, color=PPF_COLOR)
+        budget = (
+            existing_budget
+            if existing_budget is not None
+            else axes.ppf_line(agent.a_x, agent.a_y, color=PPF_COLOR)
+        )
         dot = always_redraw(
             lambda: Dot(axes.c2p(*_bundle()), color=DOT_COLOR, radius=0.1)
         )
@@ -138,7 +148,10 @@ class _PersonStageMap(Scene):
         cursors = always_redraw(
             lambda: axes.cursor_ticks(*_bundle(), agent.color)
         )
-        self.play(Write(budget), FadeIn(dot), FadeIn(cursors))
+        if existing_budget is not None:
+            self.play(FadeIn(dot), FadeIn(cursors))
+        else:
+            self.play(Write(budget), FadeIn(dot), FadeIn(cursors))
 
         if bare_pass:
             self.play(tracker.animate.set_value(t_hi), run_time=2.0, rate_func=linear)
@@ -235,15 +248,26 @@ class _PersonStageMap(Scene):
             axes, agent_a, opt_a, eco, bare_pass=True
         )
 
-        # --- 4) Iván PPF + live ICs (skip bare pass) ---
+        # --- 4) Morph Gonzalo's PPF → Iván's while recoloring; then live ICs ---
+        self.play(*[FadeOut(m) for m in finals_a], run_time=0.45)
+        budget_b = axes.ppf_line(agent_b.a_x, agent_b.a_y, color=PPF_COLOR)
+        new_name = self._agent_name(agent_b, stacked=True)
+        axes.color = agent_b.color
         self.play(
-            FadeOut(budget_a),
-            *[FadeOut(m) for m in finals_a],
-            run_time=0.5,
+            FadeOut(name),
+            FadeIn(new_name),
+            axes.animate.set_color(agent_b.color),
+            ReplacementTransform(budget_a, budget_b),
+            run_time=1.2,
         )
-        name = self._recolor_map_frame(axes, name, agent_b, stacked=True)
+        name = new_name
         budget_b, final_ic, final_dot, final_cursors = self._play_ppf_optimum(
-            axes, agent_b, opt_b, eco, bare_pass=False
+            axes,
+            agent_b,
+            opt_b,
+            eco,
+            bare_pass=False,
+            existing_budget=budget_b,
         )
         self.wait(0.5)
         return {

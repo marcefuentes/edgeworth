@@ -128,14 +128,15 @@ class LabeledAxes(VGroup):
         )
         _set_outward_ticks(self.axes.x_axis, DOWN)
         _set_outward_ticks(self.axes.y_axis, LEFT)
-        xl = mono(x_label, font_size=AXIS_TITLE_SIZE, color=color).next_to(
-            self.axes.x_axis, DOWN, buff=0.35
-        )
-        yl = (
-            mono(y_label, font_size=AXIS_TITLE_SIZE, color=color)
-            .rotate(PI / 2)
-            .next_to(self.axes.y_axis, LEFT, buff=0.4)
-        )
+        # Same SW-anchored title placement as EdgeworthBox agent-A chrome.
+        title_buff = 0.4
+        bl = self.axes.coords_to_point(0, 0)
+        xl = mono(x_label, font_size=AXIS_TITLE_SIZE, color=color)
+        xl.next_to(bl, DOWN, buff=title_buff)
+        xl.shift(RIGHT * (xl.width / 2 + 0.08))
+        yl = mono(y_label, font_size=AXIS_TITLE_SIZE, color=color).rotate(PI / 2)
+        yl.next_to(bl, LEFT, buff=title_buff)
+        yl.shift(UP * (yl.height / 2 + 0.08))
 
         number_group = VGroup()
         x = self._step_x
