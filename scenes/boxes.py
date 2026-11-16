@@ -1,8 +1,7 @@
-"""Edgeworth-box scenes for the three stages."""
+"""Edgeworth-box helpers used by the full narrative."""
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -20,7 +19,6 @@ from manim import (
     always_redraw,
 )
 
-from data import get_economy
 from geometry import EPS, contract_lens_t_range, utility
 from layout import chart_size, pin_sw
 from mobjects import CONTRACT_COLOR, EdgeworthBox
@@ -35,10 +33,6 @@ from style import (
 
 DIM_OPACITY = 0.22
 ENDOWMENT_DIM_OPACITY = 0.45
-
-
-def _economy():
-    return get_economy(os.environ.get("ECONOMY"))
 
 
 def _pair_name(eco):
@@ -438,10 +432,13 @@ def _play_autarky_box(
     opt_b = final_b
     scene.bring_to_front(cursors, eq)
 
-    # Focus Gonzalo: dim Iván; attach Gonzalo's SW axes (box completes) + name.
+    # Focus Gonzalo: dim Iván (chrome + NE cursor ticks); attach Gonzalo's SW axes.
+    # cursors = [A_x, A_y, B_x, B_y] after the rotate.
+    cursors_b = VGroup(*cursors[2:])
     scene.play(
         box.chrome_b.animate.set_opacity(DIM_OPACITY),
         name_b.animate.set_opacity(DIM_OPACITY),
+        cursors_b.animate.set_opacity(DIM_OPACITY),
         box.chrome_a.animate.set_opacity(1),
         FadeIn(name_a),
         run_time=0.5,
@@ -469,62 +466,9 @@ def _play_autarky_box(
         box.chrome_b.animate.set_opacity(1),
         name_a.animate.set_opacity(1),
         name_b.animate.set_opacity(1),
+        cursors_b.animate.set_opacity(1),
         run_time=0.45,
     )
     scene.bring_to_front(cursors, eq)
     scene.wait(2)
     return eq, opt_a, opt_b, cursors
-
-
-class AutarkyBox(Scene):
-    def construct(self):
-        eco = _economy()
-        stage = eco.stage("autarky")
-        name_a, name_b = _pair_name(eco)
-        box = _make_box(eco, stage, agent_b_at_final=False)
-        _play_autarky_box(self, eco, stage, box, name_a, name_b)
-
-
-class ExchangeBox(Scene):
-    def construct(self):
-        eco = _economy()
-        stage = eco.stage("exchange")
-        name_a, name_b = _pair_name(eco)
-        box = _make_box(eco, stage)
-        _play_endowment_trade(self, eco, stage, box, name_a, name_b)
-
-
-class SpecializationBox(Scene):
-    def construct(self):
-        eco = _economy()
-        stage = eco.stage("specialization")
-        aut = eco.stage("autarky")
-        name_a, name_b = _pair_name(eco)
-        box = _make_box(eco, stage)
-        # Dimmed autarky ICs as a welfare reference on the larger box.
-        ic_hi = grey_for_level(1.0)
-        autarky_a = box.plot_ic_a(
-            utility(*aut.consume_a, eco.alpha), eco.alpha, stroke_width=3.5
-        )
-        autarky_b = box.plot_ic_b(
-            utility(*aut.consume_b, eco.alpha), eco.alpha, stroke_width=3.5
-        )
-        autarky_a.set_stroke(color=ic_hi, opacity=ENDOWMENT_DIM_OPACITY)
-        autarky_b.set_stroke(color=ic_hi, opacity=ENDOWMENT_DIM_OPACITY)
-        self.add(autarky_a, autarky_b)
-        # True corner (w=0): no endowment ICs; they grow once trade leaves the axes.
-        _play_endowment_trade(
-            self,
-            eco,
-            stage,
-            box,
-            name_a,
-            name_b,
-            endowment_a=stage.produce_a,
-            intro="sequential",
-            skip_endowment_ics=True,
-            lens_utilities=(
-                utility(*aut.consume_a, eco.alpha),
-                utility(*aut.consume_b, eco.alpha),
-            ),
-        )

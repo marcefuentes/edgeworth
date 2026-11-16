@@ -19,7 +19,8 @@ AXIS_NUMBER_SIZE = 24
 NAME_SIZE = 32
 NAME_STACK_BUFF = 0.12
 DOT_COLOR = "#76FF03"
-# Above ICs / contract curves (default z_index 0) for the whole narrative.
+# Layering: ICs (0) < budget/PPF < allocation dot.
+BUDGET_Z_INDEX = 5
 DOT_Z_INDEX = 10
 
 

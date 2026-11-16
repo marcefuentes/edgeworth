@@ -252,3 +252,5 @@ class FullNarrative(_PersonStageMap):
                 utility(*aut.consume_b, eco.alpha),
             ),
         )
+        # Extra beat on the final specialization optimum before the movie ends.
+        self.wait(2)

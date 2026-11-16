@@ -25,7 +25,7 @@ from manim import (
 )
 
 from geometry import EPS, clip_domain_for_ic, contract_point, flip_to_a
-from style import AXIS_NUMBER_SIZE, AXIS_TITLE_SIZE, DOT_COLOR, mono
+from style import AXIS_NUMBER_SIZE, AXIS_TITLE_SIZE, BUDGET_Z_INDEX, DOT_COLOR, mono
 
 
 BUDGET_COLOR = "#E76F51"
@@ -288,7 +288,9 @@ class LabeledAxes(VGroup):
         if y1 < 0:
             y1 = 0
             x1 = m / price_x
-        return Line(self.c2p(x0, y0), self.c2p(x1, y1), color=color, stroke_width=3)
+        return Line(
+            self.c2p(x0, y0), self.c2p(x1, y1), color=color, stroke_width=3
+        ).set_z_index(BUDGET_Z_INDEX)
 
     def ppf_line(self, a_x: float, a_y: float, color: str = "#43A047"):
         """Linear production-possibility frontier from (0, a_y) to (a_x, 0)."""
@@ -300,7 +302,9 @@ class LabeledAxes(VGroup):
         if a_x > self.x_max and a_x > EPS:
             y1 = a_y * (1.0 - self.x_max / a_x)
             x1 = self.x_max
-        return Line(self.c2p(x0, y0), self.c2p(x1, y1), color=color, stroke_width=4)
+        return Line(
+            self.c2p(x0, y0), self.c2p(x1, y1), color=color, stroke_width=4
+        ).set_z_index(BUDGET_Z_INDEX)
 
 
 class EdgeworthBox(VGroup):
@@ -740,7 +744,9 @@ class EdgeworthBox(VGroup):
         if len(uniq) < 2:
             return VMobject()
         uniq.sort(key=lambda p: p[0])
-        return Line(self.c2p(*uniq[0]), self.c2p(*uniq[-1]), color=color, stroke_width=3)
+        return Line(
+            self.c2p(*uniq[0]), self.c2p(*uniq[-1]), color=color, stroke_width=3
+        ).set_z_index(BUDGET_Z_INDEX)
 
     def allocation_dot(self, bundle_a: tuple[float, float], color: str = ENDOWMENT_COLOR):
         return Dot(self.c2p(*bundle_a), color=color, radius=0.08)

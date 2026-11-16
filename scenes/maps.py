@@ -1,15 +1,13 @@
-"""Individual indifference-curve + budget-line maps (agent × stage)."""
+"""Autarky map beats used by the full narrative."""
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from manim import (
-    Dot,
     FadeIn,
     FadeOut,
     ReplacementTransform,
@@ -21,11 +19,11 @@ from manim import (
     linear,
 )
 
-from data import get_economy
 from geometry import EPS, ppf_point, utility
 from layout import chart_size, pin_sw
-from mobjects import BUDGET_COLOR, LabeledAxes
+from mobjects import LabeledAxes
 from style import (
+    BUDGET_Z_INDEX,
     DOT_Z_INDEX,
     IC_LEVEL_FACTORS,
     allocation_dot,
@@ -55,37 +53,8 @@ def _make_autarky_axes(eco, color) -> LabeledAxes:
     return pin_sw(axes, axes.c2p(0, 0))
 
 
-def _economy():
-    return get_economy(os.environ.get("ECONOMY"))
-
-
-def _stage_axis_max(stage, agent=None) -> tuple[float, float]:
-    x_max = max(stage.total_x, 6.0)
-    y_max = max(stage.total_y, 4.0)
-    if agent is not None:
-        x_max = max(x_max, agent.a_x)
-        y_max = max(y_max, agent.a_y)
-    return x_max, y_max
-
-
 class _PersonStageMap(Scene):
-    agent_key: str = "a"
-    stage_key: str = "autarky"
-
-    def construct(self):
-        eco = _economy()
-        agent = eco.agent(self.agent_key)
-        stage = eco.stage(self.stage_key)
-
-        if self.agent_key == "a":
-            produce, consume = stage.produce_a, stage.consume_a
-        else:
-            produce, consume = stage.produce_b, stage.consume_b
-
-        if self.stage_key == "autarky":
-            self._construct_autarky(eco, agent, stage, produce)
-        else:
-            self._construct_trade(eco, agent, stage, produce, consume)
+    """Shared map helpers for ``FullNarrative`` (no standalone map scenes)."""
 
     def _agent_name(self, agent, *, stacked: bool = False):
         """Primary UL name, or stacked agent-B slot (matches box stages)."""
@@ -116,7 +85,6 @@ class _PersonStageMap(Scene):
         optimum,
         eco,
         *,
-        bare_pass: bool,
         existing_budget=None,
         existing_dot=None,
         existing_ic=None,
@@ -124,7 +92,7 @@ class _PersonStageMap(Scene):
         ic_family=None,
         ic_levels=None,
     ):
-        """PPF + green dot (+ optional bare pass), then ICs, then settle.
+        """PPF + green dot, then ICs, then settle.
 
         ``existing_budget``: if set, keep that line (already morphed to this
         agent's PPF) and only introduce the cursors.
@@ -202,7 +170,7 @@ class _PersonStageMap(Scene):
             intro.append(FadeIn(cursors))
         if intro:
             self.play(*intro)
-        self.bring_to_front(cursors, dot)
+        self.bring_to_front(budget, cursors, dot)
 
         dot.add_updater(lambda m: m.move_to(axes.c2p(*_bundle())))
 
@@ -210,21 +178,17 @@ class _PersonStageMap(Scene):
             # First complete B&F: family stays up; dot lights the highest curve reached.
             _highlight_family()
             ic_family.add_updater(_highlight_family)
-            self.bring_to_front(ic_family, cursors, dot)
+            self.bring_to_front(ic_family, budget, cursors, dot)
             self.play(tracker.animate.set_value(t_hi), run_time=2.0, rate_func=linear)
             self.play(tracker.animate.set_value(t_lo), run_time=2.0, rate_func=linear)
             ic_family.clear_updaters()
 
-        elif bare_pass:
-            self.play(tracker.animate.set_value(t_hi), run_time=2.0, rate_func=linear)
-            self.play(tracker.animate.set_value(t_lo), run_time=2.0, rate_func=linear)
-
-        # Second complete B&F with a single live IC (same as before), then settle.
+        # Second complete B&F with a single live IC, then settle.
         live_ic = always_redraw(
             lambda: axes.plot_ic(_u(), eco.alpha, _ic_color(), stroke_width=3)
         )
         self.add(live_ic)
-        self.bring_to_front(live_ic, cursors, dot)
+        self.bring_to_front(live_ic, budget, cursors, dot)
         first = [tracker.animate.set_value(t_hi)]
         if use_family:
             first.append(FadeOut(ic_family))
@@ -246,46 +210,9 @@ class _PersonStageMap(Scene):
             dot.animate.move_to(axes.c2p(*optimum)),
             run_time=0.5,
         )
-        self.bring_to_front(final_ic, final_cursors, dot)
+        self.bring_to_front(final_ic, budget, final_cursors, dot)
         self.wait(2.2)
         return budget, final_ic, dot, final_cursors
-
-    def _construct_autarky(self, eco, agent, stage, optimum, *, intro: str = "together"):
-        """Single-agent autarky map (individual scenes)."""
-        name = self._agent_name(agent, stacked=self.agent_key == "b")
-        axes = _make_autarky_axes(eco, agent.color)
-
-        if intro == "crossfade":
-            outgoing = list(self.mobjects)
-            self.play(
-                *[FadeOut(m) for m in outgoing],
-                FadeIn(name),
-                FadeIn(axes),
-                run_time=0.6,
-            )
-        else:
-            self.play(FadeIn(name), FadeIn(axes))
-
-        u_opt = utility(*optimum, eco.alpha)
-        u_levels = [u_opt * f for f in IC_LEVEL_FACTORS]
-        u_lo, u_hi = u_levels[0], u_levels[-1]
-        drawn = VGroup()
-        for u in u_levels:
-            t = (u - u_lo) / (u_hi - u_lo)
-            curve = axes.plot_ic(u, eco.alpha, grey_for_ic_family(t), stroke_width=3)
-            self.play(Write(curve), run_time=0.4)
-            drawn.add(curve)
-
-        self._play_ppf_optimum(
-            axes,
-            agent,
-            optimum,
-            eco,
-            bare_pass=True,
-            ic_family=drawn,
-            ic_levels=u_levels,
-        )
-        self.wait(0.8)
 
     def _construct_paired_autarky_maps(self, eco):
         """Shared prefs: Gonzalo ICs → Iván recolor → Gonzalo PPF (family lit) → Iván.
@@ -324,7 +251,6 @@ class _PersonStageMap(Scene):
             agent_a,
             opt_a,
             eco,
-            bare_pass=True,
             ic_family=drawn,
             ic_levels=u_levels,
         )
@@ -368,7 +294,7 @@ class _PersonStageMap(Scene):
         dot.set_z_index(DOT_Z_INDEX)
         dot.add_updater(lambda m: m.move_to(axes.c2p(*_handoff_bundle())))
         self.add(live_handoff, handoff_cursors)
-        self.bring_to_front(live_handoff, handoff_cursors, dot)
+        self.bring_to_front(live_handoff, budget_a, handoff_cursors, dot)
         new_name.set_opacity(0)
         self.add(new_name)
         self.play(
@@ -389,7 +315,8 @@ class _PersonStageMap(Scene):
         # Freeze cursors at the handoff end; Iván's PPF beat reuses them via existing.
         end_cursors = axes.cursor_ticks(*end_bundle, agent_b.color)
         self.add(handoff_ic, end_cursors)
-        self.bring_to_front(handoff_ic, end_cursors, dot)
+        budget_b.set_z_index(BUDGET_Z_INDEX)
+        self.bring_to_front(handoff_ic, budget_b, end_cursors, dot)
         self.remove(live_handoff, handoff_cursors)
         name = new_name
         budget_b, final_ic, final_dot, final_cursors = self._play_ppf_optimum(
@@ -397,7 +324,6 @@ class _PersonStageMap(Scene):
             agent_b,
             opt_b,
             eco,
-            bare_pass=False,
             existing_budget=budget_b,
             existing_dot=dot,
             existing_ic=handoff_ic,
@@ -412,78 +338,3 @@ class _PersonStageMap(Scene):
             "dot": final_dot,
             "cursors": final_cursors,
         }
-
-    def _construct_trade(self, eco, agent, stage, produce, consume):
-        x_max, y_max = _stage_axis_max(stage, agent)
-        name = self._agent_name(agent, stacked=self.agent_key == "b")
-        width, height = chart_size(x_max, y_max)
-
-        axes = LabeledAxes(
-            x_max,
-            y_max,
-            eco.good_x,
-            eco.good_y,
-            width=width,
-            height=height,
-            color=agent.color,
-        )
-        pin_sw(axes, axes.c2p(0, 0))
-
-        u0 = utility(*produce, eco.alpha)
-        u1 = utility(*consume, eco.alpha)
-        curves = [axes.plot_ic(u0, eco.alpha, agent.color, stroke_width=2)]
-        if abs(u1 - u0) > 1e-3:
-            curves.append(axes.plot_ic(u1, eco.alpha, agent.color, stroke_width=3))
-        curves.append(
-            axes.plot_ic(max(u0, u1) * 1.25, eco.alpha, agent.color, stroke_width=1.5)
-        )
-
-        omega_dot = Dot(axes.c2p(*produce), color="#FFFFFF", radius=0.08)
-        consume_dot = Dot(axes.c2p(*consume), color=BUDGET_COLOR, radius=0.08)
-
-        self.play(FadeIn(name), FadeIn(axes))
-        for curve in curves:
-            self.play(Write(curve), run_time=0.6)
-
-        self.play(FadeIn(omega_dot))
-        budget = axes.budget_line(produce, stage.price_x)
-        self.play(Write(budget))
-        self.play(FadeIn(consume_dot))
-        self.wait(2)
-
-
-class AgentAAutarkyMap(_PersonStageMap):
-    agent_key = "a"
-    stage_key = "autarky"
-
-
-class AgentAExchangeMap(_PersonStageMap):
-    agent_key = "a"
-    stage_key = "exchange"
-
-
-class AgentASpecializationMap(_PersonStageMap):
-    agent_key = "a"
-    stage_key = "specialization"
-
-
-class AgentBAutarkyMap(_PersonStageMap):
-    agent_key = "b"
-    stage_key = "autarky"
-
-
-class AgentBExchangeMap(_PersonStageMap):
-    agent_key = "b"
-    stage_key = "exchange"
-
-
-class AgentBSpecializationMap(_PersonStageMap):
-    agent_key = "b"
-    stage_key = "specialization"
-
-
-class AutarkyMaps(_PersonStageMap):
-    """Shared IC family, then Gonzalo PPF search, then Iván PPF+ICs."""
-
-    def construct(self):
-        self._construct_paired_autarky_maps(_economy())
