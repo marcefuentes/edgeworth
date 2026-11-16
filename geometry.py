@@ -93,11 +93,19 @@ def contract_lens_t_range(
     total_y: float,
     alpha: float,
     *,
+    u_a0: float | None = None,
+    u_b0: float | None = None,
     n: int = 400,
 ) -> tuple[float, float]:
-    """t-interval on the contract curve that is preferred by both to ``endowment_a``."""
-    u_a0 = utility(*endowment_a, alpha)
-    u_b0 = utility(*flip_to_a(endowment_a, total_x, total_y), alpha)
+    """t-interval on the contract curve inside both agents' IC floors.
+
+    By default the floors are the utilities at ``endowment_a`` (and B's complement).
+    Pass ``u_a0`` / ``u_b0`` to use other reference ICs (e.g. autarky on a larger box).
+    """
+    if u_a0 is None:
+        u_a0 = utility(*endowment_a, alpha)
+    if u_b0 is None:
+        u_b0 = utility(*flip_to_a(endowment_a, total_x, total_y), alpha)
     inside: list[float] = []
     for i in range(1, n):
         t = i / n

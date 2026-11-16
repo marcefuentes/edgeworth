@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import manimpango
-from manim import Text, UL
+from manim import DOWN, LEFT, Text, UL
 
 _FONTS_DIR = Path(__file__).resolve().parent / "assets" / "fonts"
 FONT = "Roboto Mono"
@@ -17,6 +17,7 @@ for _ttf in (_FONTS_DIR / "RobotoMono-Regular.ttf", _FONTS_DIR / "RobotoMono-Med
 AXIS_TITLE_SIZE = 26
 AXIS_NUMBER_SIZE = 24
 NAME_SIZE = 32
+NAME_STACK_BUFF = 0.12
 DOT_COLOR = "#76FF03"
 # Multiples of u_opt; stop at the optimum (never above).
 IC_LEVEL_FACTORS = (0.35, 0.55, 0.75, 0.90, 1.0)
@@ -45,4 +46,12 @@ def mono(
 def person_name(name: str, color=None) -> Text:
     label = mono(name, font_size=NAME_SIZE, color=color)
     label.to_corner(UL, buff=0.35)
+    return label
+
+
+def person_name_stacked(name: str, color=None, *, under=None) -> Text:
+    """Second UL name (box-stage agent B): stacked under the primary name slot."""
+    label = mono(name, font_size=NAME_SIZE, color=color)
+    anchor = under if under is not None else person_name("Ag", color=color)
+    label.next_to(anchor, DOWN, aligned_edge=LEFT, buff=NAME_STACK_BUFF)
     return label

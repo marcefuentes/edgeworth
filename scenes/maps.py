@@ -9,10 +9,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from manim import (
-    DOWN,
-    LEFT,
-    RIGHT,
-    UP,
     Dot,
     FadeIn,
     FadeOut,
@@ -28,7 +24,13 @@ from data import get_economy
 from geometry import ppf_point, utility
 from layout import chart_size, pin_sw
 from mobjects import BUDGET_COLOR, LabeledAxes
-from style import DOT_COLOR, IC_LEVEL_FACTORS, grey_for_level, mono, person_name
+from style import (
+    DOT_COLOR,
+    IC_LEVEL_FACTORS,
+    grey_for_level,
+    person_name,
+    person_name_stacked,
+)
 
 
 PPF_COLOR = "#43A047"
@@ -82,15 +84,15 @@ class _PersonStageMap(Scene):
         else:
             self._construct_trade(eco, agent, stage, produce, consume)
 
-    def _map_w_label(self, axes, u: float):
-        lbl = mono(f"w = {u:.2f}", font_size=28)
-        lbl.next_to(axes, RIGHT, buff=0.45)
-        lbl.align_to(axes, UP).shift(DOWN * 0.3)
-        return lbl
+    def _agent_name(self, agent, *, stacked: bool = False):
+        """Primary UL name, or stacked agent-B slot (matches box stages)."""
+        if stacked:
+            return person_name_stacked(agent.name, color=agent.color)
+        return person_name(agent.name, color=agent.color)
 
-    def _recolor_map_frame(self, axes, name, agent):
+    def _recolor_map_frame(self, axes, name, agent, *, stacked: bool = False):
         """Swap person name + axis chrome color; keep geometry and ICs in place."""
-        new_name = person_name(agent.name, color=agent.color)
+        new_name = self._agent_name(agent, stacked=stacked)
         self.play(
             FadeOut(name),
             FadeIn(new_name),
@@ -142,8 +144,7 @@ class _PersonStageMap(Scene):
         live_ic = always_redraw(
             lambda: axes.plot_ic(_u(), eco.alpha, _ic_color(), stroke_width=3)
         )
-        live_w = always_redraw(lambda: self._map_w_label(axes, _u()))
-        self.add(live_ic, live_w)
+        self.add(live_ic)
         for _ in range(2):
             self.play(tracker.animate.set_value(t_hi), run_time=2.0, rate_func=linear)
             self.play(tracker.animate.set_value(t_lo), run_time=2.0, rate_func=linear)
@@ -153,24 +154,21 @@ class _PersonStageMap(Scene):
         final_ic = axes.plot_ic(u_opt, eco.alpha, grey_for_level(1.0), stroke_width=3.5)
         final_dot = Dot(axes.c2p(*optimum), color=DOT_COLOR, radius=0.1)
         final_cursors = axes.cursor_ticks(*optimum, DOT_COLOR)
-        final_w = self._map_w_label(axes, u_opt)
         self.play(
             FadeOut(live_ic),
-            FadeOut(live_w),
             FadeOut(dot),
             FadeOut(cursors),
             FadeIn(final_ic),
             FadeIn(final_dot),
             FadeIn(final_cursors),
-            FadeIn(final_w),
             run_time=0.5,
         )
         self.wait(1.2)
-        return budget, final_ic, final_dot, final_cursors, final_w
+        return budget, final_ic, final_dot, final_cursors
 
     def _construct_autarky(self, eco, agent, stage, optimum, *, intro: str = "together"):
         """Single-agent autarky map (individual scenes)."""
-        name = person_name(agent.name, color=agent.color)
+        name = self._agent_name(agent, stacked=self.agent_key == "b")
         axes = _make_autarky_axes(eco, agent.color)
 
         if intro == "crossfade":
@@ -188,19 +186,13 @@ class _PersonStageMap(Scene):
         u_levels = [u_opt * f for f in IC_LEVEL_FACTORS]
         u_lo, u_hi = u_levels[0], u_levels[-1]
         drawn = VGroup()
-        w_lbl = None
         for u in u_levels:
             t = (u - u_lo) / (u_hi - u_lo)
             curve = axes.plot_ic(u, eco.alpha, grey_for_level(t), stroke_width=3)
-            new_w = self._map_w_label(axes, u)
-            if w_lbl is None:
-                self.play(Write(curve), FadeIn(new_w), run_time=0.4)
-            else:
-                self.play(Write(curve), FadeOut(w_lbl), FadeIn(new_w), run_time=0.4)
-            w_lbl = new_w
+            self.play(Write(curve), run_time=0.4)
             drawn.add(curve)
 
-        self.play(FadeOut(drawn), FadeOut(w_lbl), run_time=0.6)
+        self.play(FadeOut(drawn), run_time=0.6)
         self._play_ppf_optimum(axes, agent, optimum, eco, bare_pass=True)
         self.wait(0.8)
 
@@ -223,25 +215,19 @@ class _PersonStageMap(Scene):
         u_levels = [u_opt_a * f for f in IC_LEVEL_FACTORS]
         u_lo, u_hi = u_levels[0], u_levels[-1]
         drawn = VGroup()
-        w_lbl = None
         for u in u_levels:
             t = (u - u_lo) / (u_hi - u_lo)
             curve = axes.plot_ic(u, eco.alpha, grey_for_level(t), stroke_width=3)
-            new_w = self._map_w_label(axes, u)
-            if w_lbl is None:
-                self.play(Write(curve), FadeIn(new_w), run_time=0.4)
-            else:
-                self.play(Write(curve), FadeOut(w_lbl), FadeIn(new_w), run_time=0.4)
-            w_lbl = new_w
+            self.play(Write(curve), run_time=0.4)
             drawn.add(curve)
 
         # --- 2) Same ICs under Iván's name/colors ---
-        name = self._recolor_map_frame(axes, name, agent_b)
+        name = self._recolor_map_frame(axes, name, agent_b, stacked=True)
         self.wait(1.0)
 
         # --- 3) Back to Gonzalo; clear ICs; PPF with bare pass then live ICs ---
         name = self._recolor_map_frame(axes, name, agent_a)
-        self.play(FadeOut(drawn), FadeOut(w_lbl), run_time=0.6)
+        self.play(FadeOut(drawn), run_time=0.6)
         budget_a, *finals_a = self._play_ppf_optimum(
             axes, agent_a, opt_a, eco, bare_pass=True
         )
@@ -252,8 +238,8 @@ class _PersonStageMap(Scene):
             *[FadeOut(m) for m in finals_a],
             run_time=0.5,
         )
-        name = self._recolor_map_frame(axes, name, agent_b)
-        budget_b, final_ic, final_dot, final_cursors, final_w = self._play_ppf_optimum(
+        name = self._recolor_map_frame(axes, name, agent_b, stacked=True)
+        budget_b, final_ic, final_dot, final_cursors = self._play_ppf_optimum(
             axes, agent_b, opt_b, eco, bare_pass=False
         )
         self.wait(0.5)
@@ -264,12 +250,11 @@ class _PersonStageMap(Scene):
             "ic": final_ic,
             "dot": final_dot,
             "cursors": final_cursors,
-            "w": final_w,
         }
 
     def _construct_trade(self, eco, agent, stage, produce, consume):
         x_max, y_max = _stage_axis_max(stage, agent)
-        name = person_name(agent.name, color=agent.color)
+        name = self._agent_name(agent, stacked=self.agent_key == "b")
         width, height = chart_size(x_max, y_max)
 
         axes = LabeledAxes(
