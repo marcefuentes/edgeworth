@@ -336,8 +336,20 @@ class SpecializationBox(Scene):
     def construct(self):
         eco = _economy()
         stage = eco.stage("specialization")
+        aut = eco.stage("autarky")
         name_a, name_b = _pair_name(eco)
         box = _make_box(eco, stage)
+        # Dimmed autarky ICs as a welfare reference on the larger box.
+        ic_hi = grey_for_level(1.0)
+        autarky_a = box.plot_ic_a(
+            utility(*aut.consume_a, eco.alpha), eco.alpha, stroke_width=3.5
+        )
+        autarky_b = box.plot_ic_b(
+            utility(*aut.consume_b, eco.alpha), eco.alpha, stroke_width=3.5
+        )
+        autarky_a.set_stroke(color=ic_hi, opacity=ENDOWMENT_DIM_OPACITY)
+        autarky_b.set_stroke(color=ic_hi, opacity=ENDOWMENT_DIM_OPACITY)
+        self.add(autarky_a, autarky_b)
         # Green dot at NW specialized endowment, then the same contract/trade beat.
         _play_endowment_trade(
             self,

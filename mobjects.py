@@ -13,7 +13,6 @@ from manim import (
     Axes,
     Dot,
     FadeIn,
-    FadeOut,
     FadeTransform,
     Line,
     ReplacementTransform,
@@ -438,25 +437,36 @@ class EdgeworthBox(VGroup):
             return
         # Geometric box center (not Axes.get_center — tips/ticks bias that).
         center = self.axes_a.coords_to_point(self.total_x / 2, self.total_y / 2)
-        # Corner-based SW arrows rotate onto the box's top/right edges exactly.
+        # Opacity — not FadeOut/FadeIn — so Scene.add/remove do not dissolve this
+        # EdgeworthBox and promote its children (which drops the box from the scene).
         anims = [
             Rotate(self.b_geom, PI, about_point=center),
-            FadeOut(self.b_labels_sw),
+            self.b_labels_sw.animate.set_opacity(0),
         ]
         for m in extras:
             anims.append(Rotate(m, PI, about_point=center))
         scene.play(*anims, run_time=run_time, rate_func=smooth)
         # Settle onto canonical NE geom (identical edges) + final labels.
         ne_geom = self._make_b_ne_geom(self.color_b)
-        self.b_labels_ne.set_opacity(1)
         scene.play(
             ReplacementTransform(self.b_geom, ne_geom),
-            FadeIn(self.b_labels_ne),
+            self.b_labels_ne.animate.set_opacity(1),
             run_time=0.3,
         )
+        # Rebuild children to match agent_b_at_final=True: [border, chrome_a, chrome_b].
+        old_chrome_b = self.chrome_b
+        if ne_geom in old_chrome_b.submobjects:
+            old_chrome_b.remove(ne_geom)
+        if old_chrome_b in self.submobjects:
+            self.remove(old_chrome_b)
+        if self.b_labels_ne in self.submobjects:
+            self.remove(self.b_labels_ne)
         self.b_geom = ne_geom
         self.chrome_b = VGroup(self.b_geom, self.b_labels_ne)
+        self.add(self.chrome_b)
         self._agent_b_at_final = True
+        # ReplacementTransform may have restructured scene tops; keep the box united.
+        scene.add(self)
 
     def play_grow_to(
         self,
