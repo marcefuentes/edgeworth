@@ -206,7 +206,7 @@ def _play_endowment_trade(
     eq.move_to(box.c2p(*stage.consume_a))
     scene.add(ic_a1, ic_b1)
     scene.wait(2)
-    return box
+    return box, ic_a1, ic_b1
 
 
 def _play_autarky_box(

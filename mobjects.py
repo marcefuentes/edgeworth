@@ -458,12 +458,20 @@ class EdgeworthBox(VGroup):
         self.chrome_b = VGroup(self.b_geom, self.b_labels_ne)
         self._agent_b_at_final = True
 
-    def play_grow_to(self, scene, target: "EdgeworthBox", *, run_time: float = 1.6) -> None:
+    def play_grow_to(
+        self,
+        scene,
+        target: "EdgeworthBox",
+        *,
+        morphs: tuple = (),
+        run_time: float = 1.6,
+    ) -> None:
         """Grow the NE frontier to ``target``; SW ticks/numbers stay put.
 
         Axis lines lengthen about the shared SW origin. New ticks/numbers past
         the old totals fade in; agent B's NE chrome morphs with the corner.
-        The scene ends with ``target`` as the live box (``self`` is removed).
+        Optional ``morphs`` are ``(source, dest)`` pairs (e.g. ICs) transformed
+        in parallel. The scene ends with ``target`` as the live box.
         """
         sw = self.c2p(0, 0)
         new_br = target.c2p(target.total_x, 0)
@@ -510,9 +518,12 @@ class EdgeworthBox(VGroup):
         ]
         if len(new_marks) > 0:
             anims.append(FadeIn(new_marks))
+        for src, dst in morphs:
+            anims.append(ReplacementTransform(src, dst))
         scene.play(*anims, run_time=run_time)
 
         # Swap to the canonical larger box (plotting / c2p stay correct).
+        # Morph destinations stay — ReplacementTransform already put them on scene.
         scene.remove(self, x_ticks, y_ticks, new_marks, chrome_b_target)
         scene.add(target)
 
