@@ -22,7 +22,7 @@ from manim import (
 )
 
 from data import get_economy
-from geometry import ppf_point, utility
+from geometry import EPS, ppf_point, utility
 from layout import chart_size, pin_sw
 from mobjects import BUDGET_COLOR, LabeledAxes
 from style import (
@@ -113,12 +113,15 @@ class _PersonStageMap(Scene):
         bare_pass: bool,
         existing_budget=None,
         existing_dot=None,
+        existing_ic=None,
     ):
         """PPF + green dot (+ optional bare pass), then live ICs, then settle.
 
         ``existing_budget``: if set, keep that line (already morphed to this
         agent's PPF) and only introduce the cursors.
         ``existing_dot``: reuse the same green dot (move it; never fade it out).
+        ``existing_ic``: IC already through the start bundle (e.g. after a
+        handoff); faded when the live IC pass begins.
         """
         u_opt = utility(*optimum, eco.alpha)
         t_lo, t_hi = 0.08, 0.92
@@ -175,7 +178,10 @@ class _PersonStageMap(Scene):
         )
         self.add(live_ic)
         # One full PPF pass with the live IC, then settle on the optimum.
-        self.play(tracker.animate.set_value(t_hi), run_time=2.0, rate_func=linear)
+        first = [tracker.animate.set_value(t_hi)]
+        if existing_ic is not None:
+            first.append(FadeOut(existing_ic))
+        self.play(*first, run_time=2.0, rate_func=linear)
         self.play(tracker.animate.set_value(t_lo), run_time=2.0, rate_func=linear)
 
         self.play(tracker.animate.set_value(t_opt), run_time=1.4, rate_func=linear)
@@ -260,20 +266,58 @@ class _PersonStageMap(Scene):
             axes, agent_a, opt_a, eco, bare_pass=True
         )
 
-        # --- 4) Morph Gonzalo's PPF → Iván's while recoloring; keep the green dot ---
-        self.play(FadeOut(final_ic_a), FadeOut(final_cursors_a), run_time=0.45)
+        # --- 4) Morph Gonzalo's PPF → Iván's; move the green dot with a live IC ---
+        self.play(FadeOut(final_cursors_a), run_time=0.35)
         budget_b = axes.ppf_line(agent_b.a_x, agent_b.a_y, color=PPF_COLOR)
         new_name = self._agent_name(agent_b, stacked=True)
         axes.color = agent_b.color
-        ivan_start = axes.c2p(*ppf_point(agent_b.a_x, agent_b.a_y, 0.08))
+        start_bundle = opt_a
+        end_bundle = ppf_point(agent_b.a_x, agent_b.a_y, 0.08)
+        u_lo = utility(*start_bundle, eco.alpha)
+        u_hi = utility(*end_bundle, eco.alpha)
+        u_min, u_max = min(u_lo, u_hi), max(u_lo, u_hi)
+        handoff = ValueTracker(0.0)
+
+        def _handoff_bundle():
+            t = handoff.get_value()
+            return (
+                start_bundle[0] + t * (end_bundle[0] - start_bundle[0]),
+                start_bundle[1] + t * (end_bundle[1] - start_bundle[1]),
+            )
+
+        def _handoff_ic():
+            u = max(utility(*_handoff_bundle(), eco.alpha), EPS)
+            # Keep the stroke readable even when utility falls toward Iván's start.
+            if u_max <= u_min + 1e-9:
+                level = 1.0
+            else:
+                level = 0.35 + 0.65 * (u - u_min) / (u_max - u_min)
+            return axes.plot_ic(
+                u, eco.alpha, grey_for_level(level), stroke_width=3.5
+            )
+
+        live_handoff = always_redraw(_handoff_ic)
+        dot.clear_updaters()
+        dot.add_updater(lambda m: m.move_to(axes.c2p(*_handoff_bundle())))
+        self.add(live_handoff)
+        self.bring_to_front(live_handoff, dot)
         self.play(
+            FadeOut(final_ic_a),
             FadeOut(name),
             FadeIn(new_name),
             axes.animate.set_color(agent_b.color),
             ReplacementTransform(budget_a, budget_b),
-            dot.animate.move_to(ivan_start),
+            handoff.animate.set_value(1.0),
             run_time=1.2,
         )
+        dot.clear_updaters()
+        dot.move_to(axes.c2p(*end_bundle))
+        handoff_ic = axes.plot_ic(
+            max(u_hi, EPS), eco.alpha, grey_for_level(1.0), stroke_width=3.5
+        )
+        self.add(handoff_ic)
+        self.bring_to_front(handoff_ic, dot)
+        self.remove(live_handoff)
         name = new_name
         budget_b, final_ic, final_dot, final_cursors = self._play_ppf_optimum(
             axes,
@@ -283,6 +327,7 @@ class _PersonStageMap(Scene):
             bare_pass=False,
             existing_budget=budget_b,
             existing_dot=dot,
+            existing_ic=handoff_ic,
         )
         self.wait(0.5)
         return {

@@ -14,7 +14,6 @@ from data import get_economy
 from geometry import utility
 from scenes.boxes import (
     ENDOWMENT_DIM_OPACITY,
-    _away_from_axes,
     _make_box,
     _pair_name,
     _play_autarky_box,
@@ -179,32 +178,32 @@ class FullNarrative(_PersonStageMap):
     def _specialization_box(
         self, eco, box, name_a, name_b, autarky_a, autarky_b, eq, ic_a, ic_b
     ):
-        """Specialize (near corner) → contract → trade; ICs stay on the dot.
+        """Specialize to the NW corner → contract → trade.
 
-        True corner production is w=0, so the endowment is nudged inside for
-        drawable ICs. Only dimmed autarky ICs stay as reference — exchange /
-        corner pairs are removed once the allocation leaves them.
+        Live ICs accompany the move to the true corner (w=0) and vanish on
+        arrival. They reappear when the allocation leaves the corner toward the
+        contract. Dimmed autarky ICs stay as the only reference.
         """
         stage = eco.stage("specialization")
         aut = eco.stage("autarky")
         ex = eco.stage("exchange")
         start = ex.consume_a
-        near_corner = _away_from_axes(stage.produce_a, stage.total_x, stage.total_y)
+        corner = stage.produce_a
 
-        # Live-move to the specialized endowment; fade exchange ICs in parallel.
-        ic_c_a, ic_c_b = _play_dot_ic_move(
+        # Live-move to the true specialized corner; ICs shrink away and vanish.
+        _play_dot_ic_move(
             self,
             eco,
             box,
             eq,
             start,
-            near_corner,
+            corner,
             run_time=1.2,
-            settle=True,
+            vanish_ics=True,
             fade_out=(ic_a, ic_b),
         )
 
-        # Contract + trade; fade corner ICs when trade starts (autarky stays).
+        # Contract while parked at the corner (no endowment ICs); trade grows them.
         _play_endowment_trade(
             self,
             eco,
@@ -212,10 +211,10 @@ class FullNarrative(_PersonStageMap):
             box,
             name_a,
             name_b,
-            endowment_a=near_corner,
-            intro="after_endowment",
-            endowment_arts=(ic_c_a, ic_c_b, eq),
-            retain_endowment_ics=False,
+            endowment_a=corner,
+            intro="after_corner",
+            endowment_arts=eq,
+            skip_endowment_ics=True,
             lens_utilities=(
                 utility(*aut.consume_a, eco.alpha),
                 utility(*aut.consume_b, eco.alpha),

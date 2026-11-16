@@ -16,6 +16,7 @@ from manim import (
     Scene,
     ValueTracker,
     VGroup,
+    VMobject,
     Write,
     always_redraw,
 )
@@ -109,23 +110,34 @@ def _play_dot_ic_move(
     *,
     run_time: float = 1.5,
     settle: bool = False,
+    vanish_ics: bool = False,
     fade_out: tuple = (),
 ) -> tuple:
-    """Move ``eq`` from ``start`` to ``end`` with live ICs always through the bundle.
+    """Move ``eq`` from ``start`` to ``end`` with live ICs through the bundle.
 
-    ``fade_out``: optional mobjects (e.g. a prior IC pair) removed during the
-    move so the scene does not accumulate stale curves.
+    Live ICs are omitted while utility is ~0 (true axis endowment). They shrink
+    away when approaching such a point and reappear when leaving it.
 
-    Returns ``(ic_a, ic_b)`` static finals at ``end`` when ``settle``; otherwise
-    leaves live ICs on the scene and returns ``(live_a, live_b, cursors)``.
+    ``fade_out``: optional prior IC pair removed during the move.
+    ``vanish_ics``: at ``end``, drop live ICs (no static settle) — use when the
+    destination is a w=0 corner.
+    ``settle``: replace live ICs with a static pair at ``end`` (ignored if
+    ``vanish_ics``).
+
+    Returns ``(ic_a, ic_b)`` when settling, else ``(None, None)`` if vanished,
+    else ``(live_a, live_b, cursors)``.
     """
     u_a0 = utility(*start, eco.alpha)
     u_b0 = utility(box.total_x - start[0], box.total_y - start[1], eco.alpha)
     u_a1 = utility(*end, eco.alpha)
     u_b1 = utility(box.total_x - end[0], box.total_y - end[1], eco.alpha)
-    # Grey scale over the path's utility range (handles u rising or falling).
+    # Grey scale over the drawable utility range along the path.
     u_a_lo, u_a_hi = min(u_a0, u_a1), max(u_a0, u_a1)
     u_b_lo, u_b_hi = min(u_b0, u_b1), max(u_b0, u_b1)
+    if u_a_hi <= EPS:
+        u_a_hi = max(u_a0, EPS)
+    if u_b_hi <= EPS:
+        u_b_hi = max(u_b0, EPS)
     progress = ValueTracker(0.0)
 
     def _bundle():
@@ -137,16 +149,17 @@ def _play_dot_ic_move(
 
     def _live_a():
         xa, ya = _bundle()
-        u = max(utility(xa, ya, eco.alpha), EPS)
+        u = utility(xa, ya, eco.alpha)
+        if u <= EPS:
+            return VMobject()
         curve = box.plot_ic_a(u, eco.alpha, stroke_width=3.5)
         return curve.set_stroke(color=grey_for_level(_utility_level(u, u_a_lo, u_a_hi)))
 
     def _live_b():
         xa, ya = _bundle()
-        u = max(
-            utility(box.total_x - xa, box.total_y - ya, eco.alpha),
-            EPS,
-        )
+        u = utility(box.total_x - xa, box.total_y - ya, eco.alpha)
+        if u <= EPS:
+            return VMobject()
         curve = box.plot_ic_b(u, eco.alpha, stroke_width=3.5)
         return curve.set_stroke(color=grey_for_level(_utility_level(u, u_b_lo, u_b_hi)))
 
@@ -162,6 +175,12 @@ def _play_dot_ic_move(
     scene.play(*anims, run_time=run_time)
     eq.clear_updaters()
     eq.move_to(box.c2p(*end))
+
+    if vanish_ics:
+        # True corner: ICs (and cursors) gone until trade leaves the axes.
+        scene.remove(live_a, live_b, cursors)
+        scene.bring_to_front(eq)
+        return None, None
 
     if not settle:
         return live_a, live_b, cursors
@@ -191,62 +210,80 @@ def _play_endowment_trade(
     endowment_arts: tuple | None = None,
     lens_utilities: tuple[float, float] | None = None,
     retain_endowment_ics: bool = True,
+    skip_endowment_ics: bool = False,
 ) -> EdgeworthBox:
     """Shared Exchange/Specialization beat: endowment → contract → trade move.
 
     intro:
       - ``together``: fade in frame + endowment ICs + dot at once
-      - ``sequential``: frame, then dot, then ICs
+      - ``sequential``: frame, then dot, then ICs (or corner dot only)
       - ``resume``: frame already on screen; start from dot + ICs
       - ``after_endowment``: frame + endowment ICs + dot already on screen;
         begin at the contract curve (``endowment_arts`` = (ic_a0, ic_b0, eq))
+      - ``after_corner``: frame + reference ICs already on screen; corner dot
+        already placed with no endowment ICs (``endowment_arts`` = eq)
 
-    The green dot always sits on a drawable IC pair: corner endowments are
-    nudged inside the box (``_away_from_axes``) so Cobb–Douglas ICs exist.
+    ``skip_endowment_ics``: true corner (w=0) — no endowment IC pair; live ICs
+    reappear as the allocation leaves the axes toward the contract.
 
     ``lens_utilities``: optional ``(u_a, u_b)`` floors for the thick contract
     segment (default: utilities at the endowment). Use autarky utilities on the
     specialization box so the highlight sits inside the autarky ICs.
 
     ``retain_endowment_ics``: if True (exchange), dim endowment ICs as a
-    reference under the live/final pair. If False (specialization), fade them
-    out when trade starts — another reference (autarky) is already on screen.
+    reference under the live/final pair. If False, fade them when trade starts.
     """
     raw_endow = endowment_a if endowment_a is not None else stage.produce_a
-    # Always a drawable interior point so the dot never floats without ICs.
-    endow = _away_from_axes(raw_endow, stage.total_x, stage.total_y)
-    u_a0 = utility(*endow, eco.alpha)
-    u_b0 = utility(stage.total_x - endow[0], stage.total_y - endow[1], eco.alpha)
+    if skip_endowment_ics:
+        # True corner endowment: keep the axis point; ICs grow after leaving it.
+        endow = raw_endow
+        u_a0 = 0.0
+        u_b0 = 0.0
+    else:
+        endow = _away_from_axes(raw_endow, stage.total_x, stage.total_y)
+        u_a0 = utility(*endow, eco.alpha)
+        u_b0 = utility(stage.total_x - endow[0], stage.total_y - endow[1], eco.alpha)
     ic_hi = grey_for_level(1.0)
     ic_a0 = ic_b0 = None
 
-    if intro == "after_endowment":
+    if intro == "after_corner":
+        if endowment_arts is None:
+            raise ValueError("endowment_arts (eq) required for intro='after_corner'")
+        eq = endowment_arts
+    elif intro == "after_endowment":
         if endowment_arts is None:
             raise ValueError("endowment_arts required for intro='after_endowment'")
         ic_a0, ic_b0, eq = endowment_arts
     else:
         eq = Dot(box.c2p(*endow), color=DOT_COLOR, radius=0.1)
-        ic_a0 = box.plot_ic_a(u_a0, eco.alpha, stroke_width=3.5)
-        ic_b0 = box.plot_ic_b(u_b0, eco.alpha, stroke_width=3.5)
-        ic_a0.set_stroke(color=ic_hi)
-        ic_b0.set_stroke(color=ic_hi)
+        if not skip_endowment_ics:
+            ic_a0 = box.plot_ic_a(u_a0, eco.alpha, stroke_width=3.5)
+            ic_b0 = box.plot_ic_b(u_b0, eco.alpha, stroke_width=3.5)
+            ic_a0.set_stroke(color=ic_hi)
+            ic_b0.set_stroke(color=ic_hi)
 
         if intro == "sequential":
             scene.play(FadeIn(name_a), FadeIn(name_b), FadeIn(box))
-            scene.play(FadeIn(eq), FadeIn(ic_a0), FadeIn(ic_b0))
+            scene.play(FadeIn(eq))
+            if ic_a0 is not None:
+                scene.play(FadeIn(ic_a0), FadeIn(ic_b0))
         elif intro == "resume":
-            scene.play(FadeIn(eq), FadeIn(ic_a0), FadeIn(ic_b0))
+            scene.play(FadeIn(eq))
+            if ic_a0 is not None:
+                scene.play(FadeIn(ic_a0), FadeIn(ic_b0))
         else:
-            scene.play(
-                FadeIn(name_a),
-                FadeIn(name_b),
-                FadeIn(box),
-                FadeIn(eq),
-                FadeIn(ic_a0),
-                FadeIn(ic_b0),
-            )
+            anims = [FadeIn(name_a), FadeIn(name_b), FadeIn(box), FadeIn(eq)]
+            if ic_a0 is not None:
+                anims.extend([FadeIn(ic_a0), FadeIn(ic_b0)])
+            scene.play(*anims)
         scene.wait(0.4)
 
+    # Lens uses a drawable stand-in when the true endowment is on the axes.
+    lens_endow = (
+        _away_from_axes(endow, stage.total_x, stage.total_y)
+        if skip_endowment_ics
+        else endow
+    )
     contract_thin = box.plot_contract(
         0.0, 1.0, color=CONTRACT_COLOR, stroke_width=1.5
     )
@@ -257,7 +294,7 @@ def _play_endowment_trade(
     if lens_utilities is not None:
         lens_kw["u_a0"], lens_kw["u_b0"] = lens_utilities
     t_lo, t_hi = contract_lens_t_range(
-        endow, stage.total_x, stage.total_y, eco.alpha, **lens_kw
+        lens_endow, stage.total_x, stage.total_y, eco.alpha, **lens_kw
     )
     contract_thick = box.plot_contract(
         t_lo, t_hi, color=CONTRACT_COLOR, stroke_width=5.5
@@ -432,8 +469,7 @@ class SpecializationBox(Scene):
         autarky_a.set_stroke(color=ic_hi, opacity=ENDOWMENT_DIM_OPACITY)
         autarky_b.set_stroke(color=ic_hi, opacity=ENDOWMENT_DIM_OPACITY)
         self.add(autarky_a, autarky_b)
-        # Near-corner start (true axes endowment is w=0); ICs stay on the dot.
-        # Autarky is the only reference — drop endowment ICs when trade starts.
+        # True corner (w=0): no endowment ICs; they grow once trade leaves the axes.
         _play_endowment_trade(
             self,
             eco,
@@ -443,7 +479,7 @@ class SpecializationBox(Scene):
             name_b,
             endowment_a=stage.produce_a,
             intro="sequential",
-            retain_endowment_ics=False,
+            skip_endowment_ics=True,
             lens_utilities=(
                 utility(*aut.consume_a, eco.alpha),
                 utility(*aut.consume_b, eco.alpha),
