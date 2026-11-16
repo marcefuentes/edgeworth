@@ -195,23 +195,29 @@ class ExchangeBox(Scene):
         # --- 4) Move green dot to trade; live ICs through the moving point ---
         ox, oy = stage.produce_a
         cx, cy = stage.consume_a
+        u_a1 = utility(*stage.consume_a, eco.alpha)
+        u_b1 = utility(*stage.consume_b, eco.alpha)
         progress = ValueTracker(0.0)
 
         def _bundle():
             t = progress.get_value()
             return (ox + t * (cx - ox), oy + t * (cy - oy))
 
+        def _level(u: float, u0: float, u1: float) -> float:
+            if u1 <= u0 + 1e-9:
+                return 1.0
+            return max(0.0, min(1.0, (u - u0) / (u1 - u0)))
+
         def _live_a():
-            curve = box.plot_ic_a(
-                utility(*_bundle(), eco.alpha), eco.alpha, stroke_width=3.5
-            )
-            return curve.set_stroke(color=ic_color)
+            u = utility(*_bundle(), eco.alpha)
+            curve = box.plot_ic_a(u, eco.alpha, stroke_width=3.5)
+            return curve.set_stroke(color=grey_for_level(_level(u, u_a0, u_a1)))
 
         def _live_b():
             xa, ya = _bundle()
-            u_b = utility(stage.total_x - xa, stage.total_y - ya, eco.alpha)
-            curve = box.plot_ic_b(u_b, eco.alpha, stroke_width=3.5)
-            return curve.set_stroke(color=ic_color)
+            u = utility(stage.total_x - xa, stage.total_y - ya, eco.alpha)
+            curve = box.plot_ic_b(u, eco.alpha, stroke_width=3.5)
+            return curve.set_stroke(color=grey_for_level(_level(u, u_b0, u_b1)))
 
         live_a = always_redraw(_live_a)
         live_b = always_redraw(_live_b)
