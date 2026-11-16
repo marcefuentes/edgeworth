@@ -14,6 +14,7 @@ from manim import (
     Dot,
     FadeIn,
     FadeOut,
+    ReplacementTransform,
     Scene,
     ValueTracker,
     VGroup,
@@ -23,6 +24,7 @@ from manim import (
 
 from data import get_economy
 from geometry import EPS, contract_lens_t_range, utility
+from layout import chart_size, pin_sw
 from mobjects import CONTRACT_COLOR, EdgeworthBox
 from style import DOT_COLOR, IC_LEVEL_FACTORS, grey_for_level, mono, person_name
 
@@ -40,6 +42,25 @@ def _pair_name(eco):
     b = mono(eco.agent_b.name, font_size=32, color=eco.agent_b.color)
     b.next_to(a, DOWN, aligned_edge=LEFT, buff=0.12)
     return a, b
+
+
+def _make_box(eco, stage, *, agent_b_at_final: bool = True) -> EdgeworthBox:
+    """Edgeworth box with shared unit scale and fixed SW origin."""
+    width, height = chart_size(stage.total_x, stage.total_y)
+    box = EdgeworthBox(
+        stage.total_x,
+        stage.total_y,
+        eco.agent_a.name,
+        eco.agent_b.name,
+        eco.good_x,
+        eco.good_y,
+        eco.agent_a.color,
+        eco.agent_b.color,
+        width=width,
+        height=height,
+        agent_b_at_final=agent_b_at_final,
+    )
+    return pin_sw(box, box.c2p(0, 0))
 
 
 def _ic_levels(u_opt: float) -> list[float]:
@@ -197,6 +218,8 @@ def _play_autarky_box(
     name_b,
     *,
     intro: str = "together",
+    existing_dot=None,
+    existing_ic=None,
 ) -> tuple:
     """Iván SW chart → rotate into NE corner → Gonzalo ICs → shared optimum.
 
@@ -204,7 +227,12 @@ def _play_autarky_box(
     """
     # Dot starts on Iván's SW chart at his optimum; 180° rotation lands it
     # on the final Edgeworth allocation (consume_a).
-    eq = Dot(box.c2p(*stage.consume_b), color=DOT_COLOR, radius=0.1)
+    if existing_dot is None:
+        eq = Dot(box.c2p(*stage.consume_b), color=DOT_COLOR, radius=0.1)
+    else:
+        eq = existing_dot
+        eq.move_to(box.c2p(*stage.consume_b))
+
     if intro == "together":
         scene.play(FadeIn(name_a), FadeIn(name_b), FadeIn(box))
 
@@ -212,28 +240,35 @@ def _play_autarky_box(
     u_a = utility(*stage.consume_a, eco.alpha)
 
     # Focus Iván: dim Gonzalo; show Iván's axes + his SW optimum
-    scene.play(
+    focus = [
         box.chrome_a.animate.set_opacity(DIM_OPACITY),
         name_a.animate.set_opacity(DIM_OPACITY),
         box.chrome_b.animate.set_opacity(1),
         name_b.animate.set_opacity(1),
-        FadeIn(eq),
-        run_time=0.5,
-    )
+    ]
+    if existing_dot is None:
+        focus.append(FadeIn(eq))
+    scene.play(*focus, run_time=0.5)
     scene.wait(0.4)
 
-    # --- Iván ICs on his SW chart, then keep only the optimum ---
-    levels_b = _ic_levels(u_b)
-    drawn_b = VGroup()
-    for u in levels_b:
-        t = (u - levels_b[0]) / (levels_b[-1] - levels_b[0])
-        curve = box.plot_ic_b_sw(u, eco.alpha, stroke_width=3)
-        curve.set_stroke(color=grey_for_level(t))
-        scene.play(Write(curve), run_time=0.4)
-        drawn_b.add(curve)
-    opt_b = drawn_b[-1]
-    lower_b = VGroup(*drawn_b[:-1])
-    scene.play(FadeOut(lower_b), opt_b.animate.set_stroke(width=3.5), run_time=0.6)
+    if existing_ic is not None:
+        # Map already left the optimum IC; snap to SW box geometry, skip the sweep.
+        opt_b = box.plot_ic_b_sw(u_b, eco.alpha, stroke_width=3.5)
+        opt_b.set_stroke(color=grey_for_level(1.0))
+        scene.play(ReplacementTransform(existing_ic, opt_b), run_time=0.45)
+    else:
+        # --- Iván ICs on his SW chart, then keep only the optimum ---
+        levels_b = _ic_levels(u_b)
+        drawn_b = VGroup()
+        for u in levels_b:
+            t = (u - levels_b[0]) / (levels_b[-1] - levels_b[0])
+            curve = box.plot_ic_b_sw(u, eco.alpha, stroke_width=3)
+            curve.set_stroke(color=grey_for_level(t))
+            scene.play(Write(curve), run_time=0.4)
+            drawn_b.add(curve)
+        opt_b = drawn_b[-1]
+        lower_b = VGroup(*drawn_b[:-1])
+        scene.play(FadeOut(lower_b), opt_b.animate.set_stroke(width=3.5), run_time=0.6)
 
     # Rotate Iván's axes + optimum IC + dot into the NE Edgeworth corner
     box.play_rotate_b_into_box(scene, eq, opt_b, run_time=2.5)
@@ -284,17 +319,7 @@ class AutarkyBox(Scene):
         eco = _economy()
         stage = eco.stage("autarky")
         name_a, name_b = _pair_name(eco)
-        box = EdgeworthBox(
-            stage.total_x,
-            stage.total_y,
-            eco.agent_a.name,
-            eco.agent_b.name,
-            eco.good_x,
-            eco.good_y,
-            eco.agent_a.color,
-            eco.agent_b.color,
-            agent_b_at_final=False,
-        ).shift(DOWN * 0.2)
+        box = _make_box(eco, stage, agent_b_at_final=False)
         _play_autarky_box(self, eco, stage, box, name_a, name_b)
 
 
@@ -303,16 +328,7 @@ class ExchangeBox(Scene):
         eco = _economy()
         stage = eco.stage("exchange")
         name_a, name_b = _pair_name(eco)
-        box = EdgeworthBox(
-            stage.total_x,
-            stage.total_y,
-            eco.agent_a.name,
-            eco.agent_b.name,
-            eco.good_x,
-            eco.good_y,
-            eco.agent_a.color,
-            eco.agent_b.color,
-        ).shift(DOWN * 0.2)
+        box = _make_box(eco, stage)
         _play_endowment_trade(self, eco, stage, box, name_a, name_b)
 
 
@@ -321,16 +337,7 @@ class SpecializationBox(Scene):
         eco = _economy()
         stage = eco.stage("specialization")
         name_a, name_b = _pair_name(eco)
-        box = EdgeworthBox(
-            stage.total_x,
-            stage.total_y,
-            eco.agent_a.name,
-            eco.agent_b.name,
-            eco.good_x,
-            eco.good_y,
-            eco.agent_a.color,
-            eco.agent_b.color,
-        ).shift(DOWN * 0.2)
+        box = _make_box(eco, stage)
         # Green dot at NW specialized endowment, then the same contract/trade beat.
         _play_endowment_trade(
             self,

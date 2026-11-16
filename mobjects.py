@@ -14,9 +14,11 @@ from manim import (
     Dot,
     FadeIn,
     FadeOut,
+    FadeTransform,
     Line,
     ReplacementTransform,
     Rotate,
+    Transform,
     VGroup,
     VMobject,
     smooth,
@@ -40,8 +42,7 @@ def _stroke_only(color, stroke_width: float) -> VMobject:
 
 
 def _tick_step(span: float) -> float:
-    if span <= 4:
-        return 1
+    """Match map chrome: every 2 units on the usual 4–8 spans."""
     if span <= 8:
         return 2
     return max(1, round(span / 4))
@@ -456,6 +457,64 @@ class EdgeworthBox(VGroup):
         self.b_geom = ne_geom
         self.chrome_b = VGroup(self.b_geom, self.b_labels_ne)
         self._agent_b_at_final = True
+
+    def play_grow_to(self, scene, target: "EdgeworthBox", *, run_time: float = 1.6) -> None:
+        """Grow the NE frontier to ``target``; SW ticks/numbers stay put.
+
+        Axis lines lengthen about the shared SW origin. New ticks/numbers past
+        the old totals fade in; agent B's NE chrome morphs with the corner.
+        The scene ends with ``target`` as the live box (``self`` is removed).
+        """
+        sw = self.c2p(0, 0)
+        new_br = target.c2p(target.total_x, 0)
+        new_tl = target.c2p(0, target.total_y)
+
+        # Detach existing A ticks so lengthening the NumberLines cannot move them.
+        x_axis = self.axes_a.x_axis
+        y_axis = self.axes_a.y_axis
+        x_ticks = x_axis.ticks
+        y_ticks = y_axis.ticks
+        x_axis.remove(x_ticks)
+        y_axis.remove(y_ticks)
+        scene.add(x_ticks, y_ticks)
+
+        new_marks = VGroup()
+        for x in target._tick_values(target.total_x):
+            if x <= self.total_x + 1e-9:
+                continue
+            p = target.c2p(x, 0)
+            tick = Line(p, p + DOWN * TICK_SIZE)
+            tick.match_style(x_axis)
+            label = mono(f"{x:g}", font_size=AXIS_NUMBER_SIZE, color=self.color_a).next_to(
+                p, DOWN, buff=0.12
+            )
+            new_marks.add(tick, label)
+        for y in target._tick_values(target.total_y):
+            if y <= self.total_y + 1e-9:
+                continue
+            p = target.c2p(0, y)
+            tick = Line(p, p + LEFT * TICK_SIZE)
+            tick.match_style(y_axis)
+            label = mono(f"{y:g}", font_size=AXIS_NUMBER_SIZE, color=self.color_a).next_to(
+                p, LEFT, buff=0.12
+            )
+            new_marks.add(tick, label)
+
+        border_target = target.border.copy()
+        chrome_b_target = target.chrome_b.copy()
+        anims = [
+            Transform(self.border, border_target),
+            x_axis.animate.put_start_and_end_on(sw, new_br),
+            y_axis.animate.put_start_and_end_on(sw, new_tl),
+            FadeTransform(self.chrome_b, chrome_b_target),
+        ]
+        if len(new_marks) > 0:
+            anims.append(FadeIn(new_marks))
+        scene.play(*anims, run_time=run_time)
+
+        # Swap to the canonical larger box (plotting / c2p stay correct).
+        scene.remove(self, x_ticks, y_ticks, new_marks, chrome_b_target)
+        scene.add(target)
 
     def c2p(self, x: float, y: float):
         return self.axes_a.coords_to_point(x, y)

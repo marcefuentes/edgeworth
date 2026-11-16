@@ -26,13 +26,28 @@ from manim import (
 
 from data import get_economy
 from geometry import ppf_point, utility
+from layout import chart_size, pin_sw
 from mobjects import BUDGET_COLOR, LabeledAxes
 from style import DOT_COLOR, IC_LEVEL_FACTORS, grey_for_level, mono, person_name
 
 
 PPF_COLOR = "#43A047"
-AUTARKY_AXIS_MAX = 8.0
-AUTARKY_SIZE = 5.5
+AUTARKY_AXIS_X_MAX = 8.0
+AUTARKY_AXIS_Y_MAX = 6.0
+
+
+def _make_autarky_axes(eco, color) -> LabeledAxes:
+    width, height = chart_size(AUTARKY_AXIS_X_MAX, AUTARKY_AXIS_Y_MAX)
+    axes = LabeledAxes(
+        AUTARKY_AXIS_X_MAX,
+        AUTARKY_AXIS_Y_MAX,
+        eco.good_x,
+        eco.good_y,
+        width=width,
+        height=height,
+        color=color,
+    )
+    return pin_sw(axes, axes.c2p(0, 0))
 
 
 def _economy():
@@ -67,56 +82,34 @@ class _PersonStageMap(Scene):
         else:
             self._construct_trade(eco, agent, stage, produce, consume)
 
-    def _construct_autarky(self, eco, agent, stage, optimum, *, intro: str = "together"):
-        name = person_name(agent.name, color=agent.color)
-        axes = LabeledAxes(
-            AUTARKY_AXIS_MAX,
-            AUTARKY_AXIS_MAX,
-            eco.good_x,
-            eco.good_y,
-            width=AUTARKY_SIZE,
-            height=AUTARKY_SIZE,
-            color=agent.color,
-        ).shift(LEFT * 0.6)
+    def _map_w_label(self, axes, u: float):
+        lbl = mono(f"w = {u:.2f}", font_size=28)
+        lbl.next_to(axes, RIGHT, buff=0.45)
+        lbl.align_to(axes, UP).shift(DOWN * 0.3)
+        return lbl
 
-        def _w_label(u: float):
-            lbl = mono(f"w = {u:.2f}", font_size=28)
-            lbl.next_to(axes, RIGHT, buff=0.45)
-            lbl.align_to(axes, UP).shift(DOWN * 0.3)
-            return lbl
+    def _recolor_map_frame(self, axes, name, agent):
+        """Swap person name + axis chrome color; keep geometry and ICs in place."""
+        new_name = person_name(agent.name, color=agent.color)
+        self.play(
+            FadeOut(name),
+            FadeIn(new_name),
+            axes.animate.set_color(agent.color),
+            run_time=0.7,
+        )
+        return new_name
 
-        if intro == "crossfade":
-            outgoing = list(self.mobjects)
-            self.play(
-                *[FadeOut(m) for m in outgoing],
-                FadeIn(name),
-                FadeIn(axes),
-                run_time=0.6,
-            )
-        else:
-            self.play(FadeIn(name), FadeIn(axes))
-
-        # --- 1) IC sweep: accumulate (low → high; darker → lighter) ---
+    def _play_ppf_optimum(
+        self,
+        axes,
+        agent,
+        optimum,
+        eco,
+        *,
+        bare_pass: bool,
+    ):
+        """PPF + green dot (+ optional bare pass), then live ICs, then settle."""
         u_opt = utility(*optimum, eco.alpha)
-        u_levels = [u_opt * f for f in IC_LEVEL_FACTORS]
-        u_lo, u_hi = u_levels[0], u_levels[-1]
-        drawn = VGroup()
-        w_lbl = None
-        for u in u_levels:
-            t = (u - u_lo) / (u_hi - u_lo)
-            curve = axes.plot_ic(u, eco.alpha, grey_for_level(t), stroke_width=3)
-            new_w = _w_label(u)
-            if w_lbl is None:
-                self.play(Write(curve), FadeIn(new_w), run_time=0.4)
-            else:
-                self.play(Write(curve), FadeOut(w_lbl), FadeIn(new_w), run_time=0.4)
-            w_lbl = new_w
-            drawn.add(curve)
-
-        # --- 2) Clear all indifference curves ---
-        self.play(FadeOut(drawn), FadeOut(w_lbl), run_time=0.6)
-
-        # --- 3) Budget + bright green dot ---
         t_lo, t_hi = 0.08, 0.92
         t_opt = max(t_lo, min(t_hi, optimum[0] / agent.a_x if agent.a_x else t_lo))
         tracker = ValueTracker(t_lo)
@@ -142,15 +135,14 @@ class _PersonStageMap(Scene):
         )
         self.play(Write(budget), FadeIn(dot), FadeIn(cursors))
 
-        # --- 4) Dot alone: back and forth once ---
-        self.play(tracker.animate.set_value(t_hi), run_time=2.0, rate_func=linear)
-        self.play(tracker.animate.set_value(t_lo), run_time=2.0, rate_func=linear)
+        if bare_pass:
+            self.play(tracker.animate.set_value(t_hi), run_time=2.0, rate_func=linear)
+            self.play(tracker.animate.set_value(t_lo), run_time=2.0, rate_func=linear)
 
-        # --- 5) Tangent ICs while dot keeps moving (a couple of times) ---
         live_ic = always_redraw(
             lambda: axes.plot_ic(_u(), eco.alpha, _ic_color(), stroke_width=3)
         )
-        live_w = always_redraw(lambda: _w_label(_u()))
+        live_w = always_redraw(lambda: self._map_w_label(axes, _u()))
         self.add(live_ic, live_w)
         for _ in range(2):
             self.play(tracker.animate.set_value(t_hi), run_time=2.0, rate_func=linear)
@@ -161,7 +153,7 @@ class _PersonStageMap(Scene):
         final_ic = axes.plot_ic(u_opt, eco.alpha, grey_for_level(1.0), stroke_width=3.5)
         final_dot = Dot(axes.c2p(*optimum), color=DOT_COLOR, radius=0.1)
         final_cursors = axes.cursor_ticks(*optimum, DOT_COLOR)
-        final_w = _w_label(u_opt)
+        final_w = self._map_w_label(axes, u_opt)
         self.play(
             FadeOut(live_ic),
             FadeOut(live_w),
@@ -173,21 +165,123 @@ class _PersonStageMap(Scene):
             FadeIn(final_w),
             run_time=0.5,
         )
-        self.wait(2)
+        self.wait(1.2)
+        return budget, final_ic, final_dot, final_cursors, final_w
+
+    def _construct_autarky(self, eco, agent, stage, optimum, *, intro: str = "together"):
+        """Single-agent autarky map (individual scenes)."""
+        name = person_name(agent.name, color=agent.color)
+        axes = _make_autarky_axes(eco, agent.color)
+
+        if intro == "crossfade":
+            outgoing = list(self.mobjects)
+            self.play(
+                *[FadeOut(m) for m in outgoing],
+                FadeIn(name),
+                FadeIn(axes),
+                run_time=0.6,
+            )
+        else:
+            self.play(FadeIn(name), FadeIn(axes))
+
+        u_opt = utility(*optimum, eco.alpha)
+        u_levels = [u_opt * f for f in IC_LEVEL_FACTORS]
+        u_lo, u_hi = u_levels[0], u_levels[-1]
+        drawn = VGroup()
+        w_lbl = None
+        for u in u_levels:
+            t = (u - u_lo) / (u_hi - u_lo)
+            curve = axes.plot_ic(u, eco.alpha, grey_for_level(t), stroke_width=3)
+            new_w = self._map_w_label(axes, u)
+            if w_lbl is None:
+                self.play(Write(curve), FadeIn(new_w), run_time=0.4)
+            else:
+                self.play(Write(curve), FadeOut(w_lbl), FadeIn(new_w), run_time=0.4)
+            w_lbl = new_w
+            drawn.add(curve)
+
+        self.play(FadeOut(drawn), FadeOut(w_lbl), run_time=0.6)
+        self._play_ppf_optimum(axes, agent, optimum, eco, bare_pass=True)
+        self.wait(0.8)
+
+    def _construct_paired_autarky_maps(self, eco):
+        """Shared prefs: Gonzalo ICs → Iván recolor → Gonzalo PPF → Iván PPF+ICs.
+
+        Returns map leftovers used to morph into the autarky Edgeworth box.
+        """
+        agent_a = eco.agent("a")
+        agent_b = eco.agent("b")
+        stage = eco.stage("autarky")
+        opt_a, opt_b = stage.produce_a, stage.produce_b
+
+        name = person_name(agent_a.name, color=agent_a.color)
+        axes = _make_autarky_axes(eco, agent_a.color)
+        self.play(FadeIn(name), FadeIn(axes))
+
+        # --- 1) Gonzalo IC family ---
+        u_opt_a = utility(*opt_a, eco.alpha)
+        u_levels = [u_opt_a * f for f in IC_LEVEL_FACTORS]
+        u_lo, u_hi = u_levels[0], u_levels[-1]
+        drawn = VGroup()
+        w_lbl = None
+        for u in u_levels:
+            t = (u - u_lo) / (u_hi - u_lo)
+            curve = axes.plot_ic(u, eco.alpha, grey_for_level(t), stroke_width=3)
+            new_w = self._map_w_label(axes, u)
+            if w_lbl is None:
+                self.play(Write(curve), FadeIn(new_w), run_time=0.4)
+            else:
+                self.play(Write(curve), FadeOut(w_lbl), FadeIn(new_w), run_time=0.4)
+            w_lbl = new_w
+            drawn.add(curve)
+
+        # --- 2) Same ICs under Iván's name/colors ---
+        name = self._recolor_map_frame(axes, name, agent_b)
+        self.wait(1.0)
+
+        # --- 3) Back to Gonzalo; clear ICs; PPF with bare pass then live ICs ---
+        name = self._recolor_map_frame(axes, name, agent_a)
+        self.play(FadeOut(drawn), FadeOut(w_lbl), run_time=0.6)
+        budget_a, *finals_a = self._play_ppf_optimum(
+            axes, agent_a, opt_a, eco, bare_pass=True
+        )
+
+        # --- 4) Iván PPF + live ICs (skip bare pass) ---
+        self.play(
+            FadeOut(budget_a),
+            *[FadeOut(m) for m in finals_a],
+            run_time=0.5,
+        )
+        name = self._recolor_map_frame(axes, name, agent_b)
+        budget_b, final_ic, final_dot, final_cursors, final_w = self._play_ppf_optimum(
+            axes, agent_b, opt_b, eco, bare_pass=False
+        )
+        self.wait(0.5)
+        return {
+            "axes": axes,
+            "name": name,
+            "budget": budget_b,
+            "ic": final_ic,
+            "dot": final_dot,
+            "cursors": final_cursors,
+            "w": final_w,
+        }
 
     def _construct_trade(self, eco, agent, stage, produce, consume):
         x_max, y_max = _stage_axis_max(stage, agent)
         name = person_name(agent.name, color=agent.color)
+        width, height = chart_size(x_max, y_max)
 
         axes = LabeledAxes(
             x_max,
             y_max,
             eco.good_x,
             eco.good_y,
-            width=6.0,
-            height=4.2,
+            width=width,
+            height=height,
             color=agent.color,
-        ).shift(DOWN * 0.15)
+        )
+        pin_sw(axes, axes.c2p(0, 0))
 
         u0 = utility(*produce, eco.alpha)
         u1 = utility(*consume, eco.alpha)
@@ -243,17 +337,7 @@ class AgentBSpecializationMap(_PersonStageMap):
 
 
 class AutarkyMaps(_PersonStageMap):
-    """Gonzalo then Iván autarky maps, back to back."""
+    """Shared IC family, then Gonzalo PPF search, then Iván PPF+ICs."""
 
     def construct(self):
-        eco = _economy()
-        stage = eco.stage("autarky")
-        for i, (key, produce) in enumerate(
-            (
-                ("a", stage.produce_a),
-                ("b", stage.produce_b),
-            )
-        ):
-            agent = eco.agent(key)
-            intro = "crossfade" if i > 0 else "together"
-            self._construct_autarky(eco, agent, stage, produce, intro=intro)
+        self._construct_paired_autarky_maps(_economy())
