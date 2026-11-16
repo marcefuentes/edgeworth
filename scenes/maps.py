@@ -96,12 +96,16 @@ class _PersonStageMap(Scene):
         """Swap person name + axis chrome color; keep geometry and ICs in place."""
         new_name = self._agent_name(agent, stacked=stacked)
         axes.color = agent.color
+        # Crossfade names (no letter-morph) in the same play as the chrome recolor.
+        new_name.set_opacity(0)
+        self.add(new_name)
         self.play(
-            FadeOut(name),
-            FadeIn(new_name),
+            name.animate.set_opacity(0),
+            new_name.animate.set_opacity(1),
             axes.animate.set_color(agent.color),
             run_time=0.7,
         )
+        self.remove(name)
         return new_name
 
     def _play_ppf_optimum(
@@ -259,10 +263,11 @@ class _PersonStageMap(Scene):
             curve = axes.plot_ic(u, eco.alpha, grey_for_level(t), stroke_width=3)
             self.play(Write(curve), run_time=0.4)
             drawn.add(curve)
+        self.wait(2.5)
 
         # --- 2) Same ICs under Iván's name/colors ---
         name = self._recolor_map_frame(axes, name, agent_b, stacked=True)
-        self.wait(1.0)
+        self.wait(2.5)
 
         # --- 3) Back to Gonzalo; clear ICs; PPF with bare pass then live ICs ---
         name = self._recolor_map_frame(axes, name, agent_a)
@@ -307,15 +312,18 @@ class _PersonStageMap(Scene):
         dot.add_updater(lambda m: m.move_to(axes.c2p(*_handoff_bundle())))
         self.add(live_handoff)
         self.bring_to_front(live_handoff, dot)
+        new_name.set_opacity(0)
+        self.add(new_name)
         self.play(
             FadeOut(final_ic_a),
-            FadeOut(name),
-            FadeIn(new_name),
+            name.animate.set_opacity(0),
+            new_name.animate.set_opacity(1),
             axes.animate.set_color(agent_b.color),
             ReplacementTransform(budget_a, budget_b),
             handoff.animate.set_value(1.0),
             run_time=1.2,
         )
+        self.remove(name)
         dot.clear_updaters()
         dot.move_to(axes.c2p(*end_bundle))
         handoff_ic = axes.plot_ic(
