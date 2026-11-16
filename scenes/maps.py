@@ -67,7 +67,7 @@ class _PersonStageMap(Scene):
         else:
             self._construct_trade(eco, agent, stage, produce, consume)
 
-    def _construct_autarky(self, eco, agent, stage, optimum):
+    def _construct_autarky(self, eco, agent, stage, optimum, *, intro: str = "together"):
         name = person_name(agent.name, color=agent.color)
         axes = LabeledAxes(
             AUTARKY_AXIS_MAX,
@@ -85,7 +85,16 @@ class _PersonStageMap(Scene):
             lbl.align_to(axes, UP).shift(DOWN * 0.3)
             return lbl
 
-        self.play(FadeIn(name), FadeIn(axes))
+        if intro == "crossfade":
+            outgoing = list(self.mobjects)
+            self.play(
+                *[FadeOut(m) for m in outgoing],
+                FadeIn(name),
+                FadeIn(axes),
+                run_time=0.6,
+            )
+        else:
+            self.play(FadeIn(name), FadeIn(axes))
 
         # --- 1) IC sweep: accumulate (low → high; darker → lighter) ---
         u_opt = utility(*optimum, eco.alpha)
@@ -239,11 +248,12 @@ class AutarkyMaps(_PersonStageMap):
     def construct(self):
         eco = _economy()
         stage = eco.stage("autarky")
-        for key, produce in (
-            ("a", stage.produce_a),
-            ("b", stage.produce_b),
+        for i, (key, produce) in enumerate(
+            (
+                ("a", stage.produce_a),
+                ("b", stage.produce_b),
+            )
         ):
             agent = eco.agent(key)
-            self._construct_autarky(eco, agent, stage, produce)
-            if key == "a":
-                self.play(*[FadeOut(m) for m in self.mobjects], run_time=0.6)
+            intro = "crossfade" if i > 0 else "together"
+            self._construct_autarky(eco, agent, stage, produce, intro=intro)

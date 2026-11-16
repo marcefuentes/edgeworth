@@ -35,8 +35,9 @@ manim -pql scenes/maps.py AgentASpecializationMap
 manim -pql scenes/maps.py AgentBAutarkyMap
 manim -pql scenes/maps.py AgentBExchangeMap
 manim -pql scenes/maps.py AgentBSpecializationMap
+manim -pql scenes/maps.py AutarkyMaps
 
-# Full narrative
+# Full narrative: autarky maps → autarky box → exchange → specialization
 manim -pql scenes/full.py FullNarrative
 ```
 
