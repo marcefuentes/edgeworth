@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from manim import Dot, FadeIn, FadeOut, ReplacementTransform, Scene
+from manim import FadeIn, FadeOut, ReplacementTransform, Scene
 
 from data import get_economy
 from geometry import utility
@@ -20,7 +20,7 @@ from scenes.boxes import (
     _play_endowment_trade,
 )
 from scenes.maps import _PersonStageMap
-from style import DOT_COLOR, grey_for_level
+from style import grey_for_level
 
 
 def _economy():
@@ -37,13 +37,13 @@ class FullNarrative(_PersonStageMap):
         eco = _economy()
         map_state = self._autarky_maps(eco)
         name_a, name_b, box, eq = self._autarky_box_from_map(eco, map_state)
-        box, ic_a, ic_b, autarky_a, autarky_b = self._exchange_box(
+        box, ic_a, ic_b, autarky_a, autarky_b, eq = self._exchange_box(
             eco, name_a, name_b, box, eq
         )
-        box, autarky_a, autarky_b = self._grow_to_specialization(
-            eco, box, name_a, name_b, ic_a, ic_b, autarky_a, autarky_b
+        box, autarky_a, autarky_b, eq = self._grow_to_specialization(
+            eco, box, name_a, name_b, ic_a, ic_b, autarky_a, autarky_b, eq
         )
-        self._specialization_box(eco, box, name_a, name_b, autarky_a, autarky_b)
+        self._specialization_box(eco, box, name_a, name_b, autarky_a, autarky_b, eq)
 
     def _autarky_maps(self, eco):
         return self._construct_paired_autarky_maps(eco)
@@ -107,13 +107,14 @@ class FullNarrative(_PersonStageMap):
 
         keep = {name_a, name_b, box, eq_old}
         extras = [m for m in list(self.mobjects) if m not in keep]
+        # Same green dot moves to the exchange endowment (never fades).
         self.play(
             *[FadeOut(m) for m in extras],
             FadeIn(ic_a0),
             FadeIn(ic_b0),
+            eq_old.animate.move_to(box.c2p(*stage.produce_a)),
             run_time=0.9,
         )
-        eq_old.move_to(box.c2p(*stage.produce_a))
         _, ic_a, ic_b = _play_endowment_trade(
             self,
             eco,
@@ -125,12 +126,12 @@ class FullNarrative(_PersonStageMap):
             endowment_arts=(ic_a0, ic_b0, eq_old),
         )
         # Endowment ICs are the autarky optima (same bundles); kept dimmed as reference.
-        return box, ic_a, ic_b, ic_a0, ic_b0
+        return box, ic_a, ic_b, ic_a0, ic_b0, eq_old
 
     def _grow_to_specialization(
-        self, eco, box_old, name_a, name_b, ic_a, ic_b, autarky_a, autarky_b
+        self, eco, box_old, name_a, name_b, ic_a, ic_b, autarky_a, autarky_b, eq
     ):
-        """Grow up/right from fixed SW; keep only dimmed autarky ICs (drop exchange)."""
+        """Grow up/right from fixed SW; keep dimmed autarky ICs and the green dot."""
         aut = eco.stage("autarky")
         stage = eco.stage("specialization")
         # Keep Iván's upside-down NE titles/numbers after the autarky rotate-in.
@@ -143,7 +144,7 @@ class FullNarrative(_PersonStageMap):
         autarky_a_new.set_stroke(color=ic_hi, opacity=ENDOWMENT_DIM_OPACITY)
         autarky_b_new.set_stroke(color=ic_hi, opacity=ENDOWMENT_DIM_OPACITY)
 
-        keep = {name_a, name_b, box_old, autarky_a, autarky_b}
+        keep = {name_a, name_b, box_old, autarky_a, autarky_b, eq}
         extras = [m for m in list(self.mobjects) if m not in keep]
         # Exchange finals fade with extras (no meaningful ICs at the u=0 corner).
         if extras:
@@ -154,19 +155,22 @@ class FullNarrative(_PersonStageMap):
             morphs=((autarky_a, autarky_a_new), (autarky_b, autarky_b_new)),
             run_time=1.6,
         )
-        return box_new, autarky_a_new, autarky_b_new
+        # Same green dot → specialized endowment corner.
+        self.play(
+            eq.animate.move_to(box_new.c2p(*stage.produce_a)),
+            run_time=0.8,
+        )
+        return box_new, autarky_a_new, autarky_b_new, eq
 
-    def _specialization_box(self, eco, box, name_a, name_b, autarky_a, autarky_b):
+    def _specialization_box(self, eco, box, name_a, name_b, autarky_a, autarky_b, eq):
         """Corner endowment + contract/trade; dimmed autarky ICs stay as reference.
 
         No endowment ICs: specialized production is on the axes (w=0).
+        Green dot is already at the corner from the grow.
         """
         stage = eco.stage("specialization")
         aut = eco.stage("autarky")
         endow = stage.produce_a
-        eq = Dot(box.c2p(*endow), color=DOT_COLOR, radius=0.1)
-        # autarky_a/b already on scene (dimmed) from the grow.
-        self.play(FadeIn(eq), run_time=0.6)
         _play_endowment_trade(
             self,
             eco,

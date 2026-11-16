@@ -112,11 +112,13 @@ class _PersonStageMap(Scene):
         *,
         bare_pass: bool,
         existing_budget=None,
+        existing_dot=None,
     ):
         """PPF + green dot (+ optional bare pass), then live ICs, then settle.
 
         ``existing_budget``: if set, keep that line (already morphed to this
-        agent's PPF) and only introduce the dot/cursors.
+        agent's PPF) and only introduce the cursors.
+        ``existing_dot``: reuse the same green dot (move it; never fade it out).
         """
         u_opt = utility(*optimum, eco.alpha)
         t_lo, t_hi = 0.08, 0.92
@@ -140,18 +142,29 @@ class _PersonStageMap(Scene):
             if existing_budget is not None
             else axes.ppf_line(agent.a_x, agent.a_y, color=PPF_COLOR)
         )
-        dot = always_redraw(
-            lambda: Dot(axes.c2p(*_bundle()), color=DOT_COLOR, radius=0.1)
-        )
+        start = axes.c2p(*_bundle())
+        if existing_dot is None:
+            dot = Dot(start, color=DOT_COLOR, radius=0.1)
+            new_dot = True
+        else:
+            dot = existing_dot
+            new_dot = False
         # Cursor ticks match axis chrome (agent color), not the green dot.
         axes.color = agent.color
         cursors = always_redraw(
             lambda: axes.cursor_ticks(*_bundle(), agent.color)
         )
-        if existing_budget is not None:
-            self.play(FadeIn(dot), FadeIn(cursors))
+        intro = []
+        if existing_budget is None:
+            intro.append(Write(budget))
+        if new_dot:
+            intro.append(FadeIn(dot))
         else:
-            self.play(Write(budget), FadeIn(dot), FadeIn(cursors))
+            intro.append(dot.animate.move_to(start))
+        intro.append(FadeIn(cursors))
+        self.play(*intro)
+
+        dot.add_updater(lambda m: m.move_to(axes.c2p(*_bundle())))
 
         if bare_pass:
             self.play(tracker.animate.set_value(t_hi), run_time=2.0, rate_func=linear)
@@ -161,26 +174,25 @@ class _PersonStageMap(Scene):
             lambda: axes.plot_ic(_u(), eco.alpha, _ic_color(), stroke_width=3)
         )
         self.add(live_ic)
-        for _ in range(2):
-            self.play(tracker.animate.set_value(t_hi), run_time=2.0, rate_func=linear)
-            self.play(tracker.animate.set_value(t_lo), run_time=2.0, rate_func=linear)
+        # One full PPF pass with the live IC, then settle on the optimum.
+        self.play(tracker.animate.set_value(t_hi), run_time=2.0, rate_func=linear)
+        self.play(tracker.animate.set_value(t_lo), run_time=2.0, rate_func=linear)
 
         self.play(tracker.animate.set_value(t_opt), run_time=1.4, rate_func=linear)
 
+        dot.clear_updaters()
         final_ic = axes.plot_ic(u_opt, eco.alpha, grey_for_level(1.0), stroke_width=3.5)
-        final_dot = Dot(axes.c2p(*optimum), color=DOT_COLOR, radius=0.1)
         final_cursors = axes.cursor_ticks(*optimum, agent.color)
         self.play(
             FadeOut(live_ic),
-            FadeOut(dot),
             FadeOut(cursors),
             FadeIn(final_ic),
-            FadeIn(final_dot),
             FadeIn(final_cursors),
+            dot.animate.move_to(axes.c2p(*optimum)),
             run_time=0.5,
         )
         self.wait(1.2)
-        return budget, final_ic, final_dot, final_cursors
+        return budget, final_ic, dot, final_cursors
 
     def _construct_autarky(self, eco, agent, stage, optimum, *, intro: str = "together"):
         """Single-agent autarky map (individual scenes)."""
@@ -244,20 +256,22 @@ class _PersonStageMap(Scene):
         # --- 3) Back to Gonzalo; clear ICs; PPF with bare pass then live ICs ---
         name = self._recolor_map_frame(axes, name, agent_a)
         self.play(FadeOut(drawn), run_time=0.6)
-        budget_a, *finals_a = self._play_ppf_optimum(
+        budget_a, final_ic_a, dot, final_cursors_a = self._play_ppf_optimum(
             axes, agent_a, opt_a, eco, bare_pass=True
         )
 
-        # --- 4) Morph Gonzalo's PPF → Iván's while recoloring; then live ICs ---
-        self.play(*[FadeOut(m) for m in finals_a], run_time=0.45)
+        # --- 4) Morph Gonzalo's PPF → Iván's while recoloring; keep the green dot ---
+        self.play(FadeOut(final_ic_a), FadeOut(final_cursors_a), run_time=0.45)
         budget_b = axes.ppf_line(agent_b.a_x, agent_b.a_y, color=PPF_COLOR)
         new_name = self._agent_name(agent_b, stacked=True)
         axes.color = agent_b.color
+        ivan_start = axes.c2p(*ppf_point(agent_b.a_x, agent_b.a_y, 0.08))
         self.play(
             FadeOut(name),
             FadeIn(new_name),
             axes.animate.set_color(agent_b.color),
             ReplacementTransform(budget_a, budget_b),
+            dot.animate.move_to(ivan_start),
             run_time=1.2,
         )
         name = new_name
@@ -268,6 +282,7 @@ class _PersonStageMap(Scene):
             eco,
             bare_pass=False,
             existing_budget=budget_b,
+            existing_dot=dot,
         )
         self.wait(0.5)
         return {
