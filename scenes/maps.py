@@ -76,6 +76,7 @@ class _PersonStageMap(Scene):
             eco.good_y,
             width=AUTARKY_SIZE,
             height=AUTARKY_SIZE,
+            color=agent.color,
         ).shift(LEFT * 0.6)
 
         def _w_label(u: float):
@@ -176,6 +177,7 @@ class _PersonStageMap(Scene):
             eco.good_y,
             width=6.0,
             height=4.2,
+            color=agent.color,
         ).shift(DOWN * 0.15)
 
         u0 = utility(*produce, eco.alpha)
@@ -229,3 +231,19 @@ class AgentBExchangeMap(_PersonStageMap):
 class AgentBSpecializationMap(_PersonStageMap):
     agent_key = "b"
     stage_key = "specialization"
+
+
+class AutarkyMaps(_PersonStageMap):
+    """Gonzalo then Iván autarky maps, back to back."""
+
+    def construct(self):
+        eco = _economy()
+        stage = eco.stage("autarky")
+        for key, produce in (
+            ("a", stage.produce_a),
+            ("b", stage.produce_b),
+        ):
+            agent = eco.agent(key)
+            self._construct_autarky(eco, agent, stage, produce)
+            if key == "a":
+                self.play(*[FadeOut(m) for m in self.mobjects], run_time=0.6)

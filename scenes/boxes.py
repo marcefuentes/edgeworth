@@ -28,6 +28,7 @@ from mobjects import BUDGET_COLOR, CONTRACT_COLOR, EdgeworthBox
 from style import DOT_COLOR, IC_LEVEL_FACTORS, grey_for_level, mono, person_name
 
 DIM_OPACITY = 0.22
+ENDOWMENT_DIM_OPACITY = 0.45
 
 
 def _economy():
@@ -88,7 +89,7 @@ class AutarkyBox(Scene):
         for u in levels_b:
             t = (u - levels_b[0]) / (levels_b[-1] - levels_b[0])
             curve = box.plot_ic_b_sw(u, eco.alpha, stroke_width=3)
-            curve.set_color(grey_for_level(t))
+            curve.set_stroke(color=grey_for_level(t))
             self.play(Write(curve), run_time=0.4)
             drawn_b.add(curve)
         opt_b = drawn_b[-1]
@@ -100,7 +101,7 @@ class AutarkyBox(Scene):
         eq.move_to(box.c2p(*stage.consume_a))
         # Snap IC to exact Edgeworth geometry after the rotate.
         final_b = box.plot_ic_b(u_b, eco.alpha, stroke_width=3.5)
-        final_b.set_color(opt_b.get_color())
+        final_b.set_stroke(color=opt_b.get_stroke_color())
         self.remove(opt_b)
         self.add(final_b)
         opt_b = final_b
@@ -120,7 +121,7 @@ class AutarkyBox(Scene):
         for u in levels_a:
             t = (u - levels_a[0]) / (levels_a[-1] - levels_a[0])
             curve = box.plot_ic_a(u, eco.alpha, stroke_width=3)
-            curve.set_color(grey_for_level(t))
+            curve.set_stroke(color=grey_for_level(t))
             self.play(Write(curve), run_time=0.4)
             drawn_a.add(curve)
         opt_a = drawn_a[-1]
@@ -160,8 +161,8 @@ class ExchangeBox(Scene):
         ic_a0 = box.plot_ic_a(u_a0, eco.alpha, stroke_width=3.5)
         ic_b0 = box.plot_ic_b(u_b0, eco.alpha, stroke_width=3.5)
         ic_color = grey_for_level(1.0)
-        ic_a0.set_color(ic_color)
-        ic_b0.set_color(ic_color)
+        ic_a0.set_stroke(color=ic_color)
+        ic_b0.set_stroke(color=ic_color)
         eq = Dot(box.c2p(*stage.produce_a), color=DOT_COLOR, radius=0.1)
 
         self.play(
@@ -204,18 +205,24 @@ class ExchangeBox(Scene):
             curve = box.plot_ic_a(
                 utility(*_bundle(), eco.alpha), eco.alpha, stroke_width=3.5
             )
-            return curve.set_color(ic_color)
+            return curve.set_stroke(color=ic_color)
 
         def _live_b():
             xa, ya = _bundle()
             u_b = utility(stage.total_x - xa, stage.total_y - ya, eco.alpha)
             curve = box.plot_ic_b(u_b, eco.alpha, stroke_width=3.5)
-            return curve.set_color(ic_color)
+            return curve.set_stroke(color=ic_color)
 
         live_a = always_redraw(_live_a)
         live_b = always_redraw(_live_b)
         eq.add_updater(lambda m: m.move_to(box.c2p(*_bundle())))
 
+        # Dim endowment IC strokes only; keep them as a faint reference.
+        self.play(
+            ic_a0.animate.set_stroke(opacity=ENDOWMENT_DIM_OPACITY),
+            ic_b0.animate.set_stroke(opacity=ENDOWMENT_DIM_OPACITY),
+            run_time=0.5,
+        )
         self.add(live_a, live_b)
         self.play(progress.animate.set_value(1.0), run_time=2.0)
         eq.clear_updaters()
@@ -227,8 +234,8 @@ class ExchangeBox(Scene):
         ic_b1 = box.plot_ic_b(
             utility(*stage.consume_b, eco.alpha), eco.alpha, stroke_width=3.5
         )
-        ic_a1.set_color(ic_color)
-        ic_b1.set_color(ic_color)
+        ic_a1.set_stroke(color=ic_color)
+        ic_b1.set_stroke(color=ic_color)
         eq.move_to(box.c2p(*stage.consume_a))
         self.add(ic_a1, ic_b1)
         self.wait(2)

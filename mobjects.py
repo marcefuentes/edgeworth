@@ -32,6 +32,13 @@ ENDOWMENT_COLOR = WHITE
 TICK_SIZE = 0.08
 
 
+def _stroke_only(color, stroke_width: float) -> VMobject:
+    """Curve mobject with no fill (avoids area shading when opacity changes)."""
+    curve = VMobject(stroke_width=stroke_width, fill_opacity=0)
+    curve.set_stroke(color=color, width=stroke_width, opacity=1)
+    return curve
+
+
 def _tick_step(span: float) -> float:
     if span <= 4:
         return 1
@@ -63,14 +70,16 @@ def _edge_ticks(points_along_axis, outward, color, tick_size: float = TICK_SIZE)
     return ticks
 
 
-def _axis_number_labels(axes: Axes, x_max: float, y_max: float) -> VGroup:
+def _axis_number_labels(
+    axes: Axes, x_max: float, y_max: float, color=GREY_B
+) -> VGroup:
     labels = VGroup()
     step_x = _tick_step(x_max)
     step_y = _tick_step(y_max)
     x = step_x
     while x <= x_max + 1e-9:
         labels.add(
-            mono(f"{x:g}", font_size=AXIS_NUMBER_SIZE, color=GREY_B).next_to(
+            mono(f"{x:g}", font_size=AXIS_NUMBER_SIZE, color=color).next_to(
                 axes.coords_to_point(x, 0), DOWN, buff=0.12
             )
         )
@@ -78,7 +87,7 @@ def _axis_number_labels(axes: Axes, x_max: float, y_max: float) -> VGroup:
     y = step_y
     while y <= y_max + 1e-9:
         labels.add(
-            mono(f"{y:g}", font_size=AXIS_NUMBER_SIZE, color=GREY_B).next_to(
+            mono(f"{y:g}", font_size=AXIS_NUMBER_SIZE, color=color).next_to(
                 axes.coords_to_point(0, y), LEFT, buff=0.12
             )
         )
@@ -96,6 +105,7 @@ class LabeledAxes(VGroup):
         *,
         width: float = 5.5,
         height: float = 4.0,
+        color=GREY_B,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -110,18 +120,18 @@ class LabeledAxes(VGroup):
             y_length=height,
             axis_config={
                 "include_numbers": False,
-                "color": GREY_B,
+                "color": color,
                 "tick_size": TICK_SIZE,
             },
             tips=False,
         )
         _set_outward_ticks(self.axes.x_axis, DOWN)
         _set_outward_ticks(self.axes.y_axis, LEFT)
-        xl = mono(x_label, font_size=AXIS_TITLE_SIZE).next_to(
+        xl = mono(x_label, font_size=AXIS_TITLE_SIZE, color=color).next_to(
             self.axes.x_axis, DOWN, buff=0.35
         )
         yl = (
-            mono(y_label, font_size=AXIS_TITLE_SIZE)
+            mono(y_label, font_size=AXIS_TITLE_SIZE, color=color)
             .rotate(PI / 2)
             .next_to(self.axes.y_axis, LEFT, buff=0.4)
         )
@@ -130,7 +140,7 @@ class LabeledAxes(VGroup):
         x = self._step_x
         while x <= x_max + 1e-9:
             number_group.add(
-                mono(f"{x:g}", font_size=AXIS_NUMBER_SIZE, color=GREY_B).next_to(
+                mono(f"{x:g}", font_size=AXIS_NUMBER_SIZE, color=color).next_to(
                     self.axes.coords_to_point(x, 0), DOWN, buff=0.12
                 )
             )
@@ -138,7 +148,7 @@ class LabeledAxes(VGroup):
         y = self._step_y
         while y <= y_max + 1e-9:
             number_group.add(
-                mono(f"{y:g}", font_size=AXIS_NUMBER_SIZE, color=GREY_B).next_to(
+                mono(f"{y:g}", font_size=AXIS_NUMBER_SIZE, color=color).next_to(
                     self.axes.coords_to_point(0, y), LEFT, buff=0.12
                 )
             )
@@ -170,7 +180,7 @@ class LabeledAxes(VGroup):
         pts = clip_domain_for_ic(u, alpha, self.x_max, self.y_max)
         if len(pts) < 2:
             return VMobject()
-        curve = VMobject(color=color, stroke_width=stroke_width)
+        curve = _stroke_only(color, stroke_width)
         curve.set_points_smoothly([self.c2p(x, y) for x, y in pts])
         return curve
 
@@ -271,7 +281,7 @@ class EdgeworthBox(VGroup):
         ya = mono(good_y, font_size=AXIS_TITLE_SIZE, color=color_a).rotate(PI / 2)
         ya.next_to(bl, LEFT, buff=self._title_buff)
         ya.shift(UP * (ya.height / 2 + 0.08))
-        labels_a = _axis_number_labels(self.axes_a, total_x, total_y)
+        labels_a = _axis_number_labels(self.axes_a, total_x, total_y, color_a)
 
         self.color_a = color_a
         self.color_b = color_b
@@ -454,7 +464,7 @@ class EdgeworthBox(VGroup):
         pts = clip_domain_for_ic(u, alpha, self.total_x, self.total_y)
         if len(pts) < 2:
             return VMobject()
-        curve = VMobject(color=self.color_a, stroke_width=stroke_width)
+        curve = _stroke_only(self.color_a, stroke_width)
         curve.set_points_smoothly([self.c2p(x, y) for x, y in pts])
         return curve
 
@@ -463,7 +473,7 @@ class EdgeworthBox(VGroup):
         pts = clip_domain_for_ic(u, alpha, self.total_x, self.total_y)
         if len(pts) < 2:
             return VMobject()
-        curve = VMobject(color=self.color_b, stroke_width=stroke_width)
+        curve = _stroke_only(self.color_b, stroke_width)
         curve.set_points_smoothly([self.c2p(x, y) for x, y in pts])
         return curve
 
@@ -481,7 +491,7 @@ class EdgeworthBox(VGroup):
         if len(pts_a) < 2:
             return VMobject()
         pts_a.sort(key=lambda p: p[0])
-        curve = VMobject(color=self.color_b, stroke_width=stroke_width)
+        curve = _stroke_only(self.color_b, stroke_width)
         curve.set_points_smoothly([self.c2p(x, y) for x, y in pts_a])
         return curve
 
@@ -532,7 +542,7 @@ class EdgeworthBox(VGroup):
         if t1 <= t0 + EPS:
             return VMobject()
         ts = [t0 + (t1 - t0) * i / (n - 1) for i in range(n)]
-        curve = VMobject(color=color, stroke_width=stroke_width)
+        curve = _stroke_only(color, stroke_width)
         curve.set_points_smoothly(
             [self.c2p(*contract_point(t, self.total_x, self.total_y)) for t in ts]
         )
