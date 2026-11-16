@@ -219,6 +219,13 @@ class LabeledAxes(VGroup):
             anims.append(FadeOut(outer))
         anims.extend(extra_anims)
         scene.play(*anims, run_time=run_time)
+        # Reattach kept ticks so a later FadeOut(self) does not leave orphans
+        # sitting on the SW edge (they look like Iván's ticks "left behind").
+        scene.remove(x_ticks, y_ticks)
+        x_axis.add(x_ticks)
+        y_axis.add(y_ticks)
+        x_axis.ticks = x_ticks
+        y_axis.ticks = y_ticks
 
     def cursor_ticks(
         self,
@@ -370,10 +377,12 @@ class EdgeworthBox(VGroup):
                 self.chrome_b = VGroup(self.b_geom, self.b_labels_ne)
             self.add(border, self.chrome_a, self.chrome_b)
         else:
-            # Start in SW orientation (0 at SW); labels rotate with the axes.
-            self.b_labels_ne.set_opacity(0)
+            # Open: both chromes present (Gonzalo starts dimmed in the beat),
+            # but no grey border until the box completes with Gonzalo's focus.
+            # Do not add upright NE labels — FadeIn(box) would revive them and
+            # flash duplicate numbers (e.g. two "6"s) before the rotate.
             self.chrome_b = VGroup(self.b_geom, self.b_labels_sw)
-            self.add(border, self.chrome_a, self.chrome_b, self.b_labels_ne)
+            self.add(self.chrome_a, self.chrome_b)
 
     def _tick_values(self, span: float) -> list[float]:
         step = _tick_step(span)
@@ -511,12 +520,9 @@ class EdgeworthBox(VGroup):
             return
         # Geometric box center (not Axes.get_center — tips/ticks bias that).
         center = self.axes_a.coords_to_point(self.total_x / 2, self.total_y / 2)
-        # Rotate geom + SW titles/numbers together; keep labels upside-down at NE
-        # for the rest of the narrative (no upright NE label swap).
-        anims = [
-            Rotate(self.b_geom, PI, about_point=center),
-            Rotate(self.b_labels_sw, PI, about_point=center),
-        ]
+        # Rotate whole B chrome (axes + ticks + SW titles/numbers) together;
+        # keep labels upside-down at NE (no upright NE label swap).
+        anims = [Rotate(self.chrome_b, PI, about_point=center)]
         for m in extras:
             anims.append(Rotate(m, PI, about_point=center))
         scene.play(*anims, run_time=run_time, rate_func=smooth)
@@ -590,14 +596,15 @@ class EdgeworthBox(VGroup):
             )
             new_marks.add(tick, label)
 
-        border_target = target.border.copy()
         chrome_b_target = target.chrome_b.copy()
         anims = [
-            Transform(self.border, border_target),
             x_axis.animate.put_start_and_end_on(sw, new_br),
             y_axis.animate.put_start_and_end_on(sw, new_tl),
             FadeTransform(self.chrome_b, chrome_b_target),
         ]
+        # Open autarky boxes omit the grey border; closed ones morph it with the grow.
+        if self.border in self.submobjects:
+            anims.insert(0, Transform(self.border, target.border.copy()))
         if len(new_marks) > 0:
             anims.append(FadeIn(new_marks))
         for src, dst in morphs:

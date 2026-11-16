@@ -355,13 +355,14 @@ def _play_autarky_box(
     if intro == "together":
         # Iván-only open; Gonzalo's name arrives with his focus beat.
         scene.play(FadeIn(name_b), FadeIn(box))
+        # FadeIn revives child opacities — keep Gonzalo hidden (no stacked "6").
+        box.chrome_a.set_opacity(0)
 
     u_b = utility(*stage.consume_b, eco.alpha)
     u_a = utility(*stage.consume_a, eco.alpha)
 
-    # Focus Iván: dim Gonzalo's chrome; Iván's name already on screen alone
+    # Focus Iván: Gonzalo stays hidden; Iván's name already on screen alone
     focus = [
-        box.chrome_a.animate.set_opacity(DIM_OPACITY),
         box.chrome_b.animate.set_opacity(1),
         name_b.animate.set_opacity(1),
     ]
@@ -389,6 +390,9 @@ def _play_autarky_box(
         lower_b = VGroup(*drawn_b[:-1])
         scene.play(FadeOut(lower_b), opt_b.animate.set_stroke(width=3.5), run_time=0.6)
 
+    # Drop Gonzalo before the rotate so dimmed SW axes don't close a faint
+    # empty rectangle once Iván reaches NE; he returns on his focus beat.
+    box.chrome_a.set_opacity(0)
     # Rotate Iván's axes + optimum IC + dot into the NE Edgeworth corner
     box.play_rotate_b_into_box(scene, eq, opt_b, run_time=2.5)
     eq.move_to(box.c2p(*stage.consume_a))
@@ -399,7 +403,7 @@ def _play_autarky_box(
     scene.add(final_b)
     opt_b = final_b
 
-    # Focus Gonzalo: dim Iván; bring Gonzalo's name in for the first time
+    # Focus Gonzalo: dim Iván; attach Gonzalo's SW axes (box completes) + name.
     scene.play(
         box.chrome_b.animate.set_opacity(DIM_OPACITY),
         name_b.animate.set_opacity(DIM_OPACITY),

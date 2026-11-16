@@ -77,7 +77,11 @@ class FullNarrative(_PersonStageMap):
             ),
             run_time=1.4,
         )
+        # Crossfade to the open box (no grey border yet — that arrives with Gonzalo).
+        # FadeIn revives child opacities, so hide Gonzalo again afterward — otherwise
+        # his SW "6" stacks on Iván's during the handoff.
         self.play(FadeOut(axes), FadeIn(box), run_time=0.45)
+        box.chrome_a.set_opacity(0)
         _play_autarky_box(
             self,
             eco,
