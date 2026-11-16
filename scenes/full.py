@@ -59,19 +59,22 @@ class FullNarrative(_PersonStageMap):
         dot = map_state["dot"]
         target = box.c2p(*stage.consume_b)
 
-        # Opacity crossfade (not FadeTransform): ticks at 2/4/6 keep screen
-        # positions under the shared CHART_UNIT. Keep Iván's optimum IC + green
-        # dot; only the map chrome extras and axes span beyond the box go away.
-        # Only Iván's name at the box open (Gonzalo joins when his ICs start).
-        self.play(
-            FadeOut(map_state["budget"]),
-            FadeOut(map_state["cursors"]),
-            FadeOut(axes),
-            FadeIn(box),
-            ReplacementTransform(ivan_name, name_b),
-            dot.animate.move_to(target),
+        # Shrink map axes about SW to the autarky box (8×6 → 6×4), like the
+        # inverse of exchange→specialization grow. Shared ticks at 2/4/6 stay put.
+        # Keep Iván's optimum IC + green dot; only Iván's name at the box open.
+        axes.play_shrink_to(
+            self,
+            stage.total_x,
+            stage.total_y,
+            extra_anims=(
+                FadeOut(map_state["budget"]),
+                FadeOut(map_state["cursors"]),
+                ReplacementTransform(ivan_name, name_b),
+                dot.animate.move_to(target),
+            ),
             run_time=1.4,
         )
+        self.play(FadeOut(axes), FadeIn(box), run_time=0.45)
         _play_autarky_box(
             self,
             eco,

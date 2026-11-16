@@ -13,6 +13,7 @@ from manim import (
     Axes,
     Dot,
     FadeIn,
+    FadeOut,
     FadeTransform,
     Line,
     ReplacementTransform,
@@ -138,10 +139,16 @@ class LabeledAxes(VGroup):
         yl.next_to(bl, LEFT, buff=title_buff)
         yl.shift(UP * (yl.height / 2 + 0.08))
 
-        number_group = VGroup()
+        self.x_title = xl
+        self.y_title = yl
+        self.x_numbers = VGroup()
+        self.y_numbers = VGroup()
+        self.x_number_vals: list[float] = []
+        self.y_number_vals: list[float] = []
         x = self._step_x
         while x <= x_max + 1e-9:
-            number_group.add(
+            self.x_number_vals.append(x)
+            self.x_numbers.add(
                 mono(f"{x:g}", font_size=AXIS_NUMBER_SIZE, color=color).next_to(
                     self.axes.coords_to_point(x, 0), DOWN, buff=0.12
                 )
@@ -149,17 +156,69 @@ class LabeledAxes(VGroup):
             x += self._step_x
         y = self._step_y
         while y <= y_max + 1e-9:
-            number_group.add(
+            self.y_number_vals.append(y)
+            self.y_numbers.add(
                 mono(f"{y:g}", font_size=AXIS_NUMBER_SIZE, color=color).next_to(
                     self.axes.coords_to_point(0, y), LEFT, buff=0.12
                 )
             )
             y += self._step_y
 
-        self.add(self.axes, xl, yl, number_group)
+        self.add(self.axes, xl, yl, self.x_numbers, self.y_numbers)
 
     def c2p(self, x: float, y: float):
         return self.axes.coords_to_point(x, y)
+
+    def play_shrink_to(
+        self,
+        scene,
+        target_x: float,
+        target_y: float,
+        *,
+        extra_anims: tuple = (),
+        run_time: float = 1.4,
+    ) -> None:
+        """Shrink axes about the shared SW origin to ``(target_x, target_y)``.
+
+        Ticks/numbers at or inside the target stay put; marks past the new
+        frontier fade out (inverse of EdgeworthBox.play_grow_to).
+        """
+        sw = self.c2p(0, 0)
+        new_br = self.c2p(target_x, 0)
+        new_tl = self.c2p(0, target_y)
+
+        x_axis = self.axes.x_axis
+        y_axis = self.axes.y_axis
+        x_ticks = x_axis.ticks
+        y_ticks = y_axis.ticks
+        x_axis.remove(x_ticks)
+        y_axis.remove(y_ticks)
+        scene.add(x_ticks, y_ticks)
+
+        x_vals = list(x_axis.get_tick_range())
+        y_vals = list(y_axis.get_tick_range())
+        outer = VGroup()
+        for tick, val in zip(x_ticks, x_vals):
+            if val > target_x + 1e-9:
+                outer.add(tick)
+        for tick, val in zip(y_ticks, y_vals):
+            if val > target_y + 1e-9:
+                outer.add(tick)
+        for label, val in zip(self.x_numbers, self.x_number_vals):
+            if val > target_x + 1e-9:
+                outer.add(label)
+        for label, val in zip(self.y_numbers, self.y_number_vals):
+            if val > target_y + 1e-9:
+                outer.add(label)
+
+        anims = [
+            x_axis.animate.put_start_and_end_on(sw, new_br),
+            y_axis.animate.put_start_and_end_on(sw, new_tl),
+        ]
+        if len(outer) > 0:
+            anims.append(FadeOut(outer))
+        anims.extend(extra_anims)
+        scene.play(*anims, run_time=run_time)
 
     def cursor_ticks(
         self,
