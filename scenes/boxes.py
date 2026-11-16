@@ -50,7 +50,13 @@ def _pair_name(eco):
     return a, b
 
 
-def _make_box(eco, stage, *, agent_b_at_final: bool = True) -> EdgeworthBox:
+def _make_box(
+    eco,
+    stage,
+    *,
+    agent_b_at_final: bool = True,
+    b_labels_rotated: bool = False,
+) -> EdgeworthBox:
     """Edgeworth box with shared unit scale and fixed SW origin."""
     width, height = chart_size(stage.total_x, stage.total_y)
     box = EdgeworthBox(
@@ -65,6 +71,7 @@ def _make_box(eco, stage, *, agent_b_at_final: bool = True) -> EdgeworthBox:
         width=width,
         height=height,
         agent_b_at_final=agent_b_at_final,
+        b_labels_rotated=b_labels_rotated,
     )
     return pin_sw(box, box.c2p(0, 0))
 

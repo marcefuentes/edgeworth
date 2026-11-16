@@ -133,7 +133,8 @@ class FullNarrative(_PersonStageMap):
         """Grow up/right from fixed SW; keep only dimmed autarky ICs (drop exchange)."""
         aut = eco.stage("autarky")
         stage = eco.stage("specialization")
-        box_new = _make_box(eco, stage)
+        # Keep Iván's upside-down NE titles/numbers after the autarky rotate-in.
+        box_new = _make_box(eco, stage, b_labels_rotated=True)
         ic_hi = grey_for_level(1.0)
         u_aut_a = utility(*aut.consume_a, eco.alpha)
         u_aut_b = utility(*aut.consume_b, eco.alpha)

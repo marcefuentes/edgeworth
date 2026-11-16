@@ -299,6 +299,7 @@ class EdgeworthBox(VGroup):
         width: float = 5.5,
         height: float = None,
         agent_b_at_final: bool = True,
+        b_labels_rotated: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -310,6 +311,8 @@ class EdgeworthBox(VGroup):
         self.good_y = good_y
         self._title_buff = 0.4
         self._agent_b_at_final = agent_b_at_final
+        # After Iván's 180° rotate-in, SW titles/numbers stay (upside-down at NE).
+        self._b_labels_rotated = bool(b_labels_rotated and agent_b_at_final)
         if height is None:
             height = width * (total_y / total_x)
         self._width = width
@@ -358,10 +361,16 @@ class EdgeworthBox(VGroup):
             color_b
         )
         if agent_b_at_final:
-            self.chrome_b = VGroup(self.b_geom, self.b_labels_ne)
+            if self._b_labels_rotated:
+                # Same upside-down NE chrome as after play_rotate_b_into_box.
+                center = self.axes_a.coords_to_point(total_x / 2, total_y / 2)
+                self.b_labels_sw.rotate(PI, about_point=center)
+                self.chrome_b = VGroup(self.b_geom, self.b_labels_sw)
+            else:
+                self.chrome_b = VGroup(self.b_geom, self.b_labels_ne)
             self.add(border, self.chrome_a, self.chrome_b)
         else:
-            # Start in SW orientation (0 at SW); NE labels ready for after rotation.
+            # Start in SW orientation (0 at SW); labels rotate with the axes.
             self.b_labels_ne.set_opacity(0)
             self.chrome_b = VGroup(self.b_geom, self.b_labels_sw)
             self.add(border, self.chrome_a, self.chrome_b, self.b_labels_ne)
@@ -502,22 +511,18 @@ class EdgeworthBox(VGroup):
             return
         # Geometric box center (not Axes.get_center — tips/ticks bias that).
         center = self.axes_a.coords_to_point(self.total_x / 2, self.total_y / 2)
-        # Opacity — not FadeOut/FadeIn — so Scene.add/remove do not dissolve this
-        # EdgeworthBox and promote its children (which drops the box from the scene).
+        # Rotate geom + SW titles/numbers together; keep labels upside-down at NE
+        # for the rest of the narrative (no upright NE label swap).
         anims = [
             Rotate(self.b_geom, PI, about_point=center),
-            self.b_labels_sw.animate.set_opacity(0),
+            Rotate(self.b_labels_sw, PI, about_point=center),
         ]
         for m in extras:
             anims.append(Rotate(m, PI, about_point=center))
         scene.play(*anims, run_time=run_time, rate_func=smooth)
-        # Settle onto canonical NE geom (identical edges) + final labels.
+        # Settle onto canonical NE geom (identical edges); keep rotated labels.
         ne_geom = self._make_b_ne_geom(self.color_b)
-        scene.play(
-            ReplacementTransform(self.b_geom, ne_geom),
-            self.b_labels_ne.animate.set_opacity(1),
-            run_time=0.3,
-        )
+        scene.play(ReplacementTransform(self.b_geom, ne_geom), run_time=0.3)
         # Rebuild children to match agent_b_at_final=True: [border, chrome_a, chrome_b].
         old_chrome_b = self.chrome_b
         if ne_geom in old_chrome_b.submobjects:
@@ -526,10 +531,12 @@ class EdgeworthBox(VGroup):
             self.remove(old_chrome_b)
         if self.b_labels_ne in self.submobjects:
             self.remove(self.b_labels_ne)
+        scene.remove(self.b_labels_ne)
         self.b_geom = ne_geom
-        self.chrome_b = VGroup(self.b_geom, self.b_labels_ne)
+        self.chrome_b = VGroup(self.b_geom, self.b_labels_sw)
         self.add(self.chrome_b)
         self._agent_b_at_final = True
+        self._b_labels_rotated = True
         # ReplacementTransform may have restructured scene tops; keep the box united.
         scene.add(self)
 
