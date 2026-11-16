@@ -37,15 +37,15 @@ class FullNarrative(_PersonStageMap):
     def construct(self):
         eco = _economy()
         map_state = self._autarky_maps(eco)
-        name_a, name_b, box, eq = self._autarky_box_from_map(eco, map_state)
-        box, ic_a, ic_b, autarky_a, autarky_b, eq = self._exchange_box(
-            eco, name_a, name_b, box, eq
+        name_a, name_b, box, eq, cursors = self._autarky_box_from_map(eco, map_state)
+        box, ic_a, ic_b, autarky_a, autarky_b, eq, cursors = self._exchange_box(
+            eco, name_a, name_b, box, eq, cursors
         )
-        box, autarky_a, autarky_b, eq, ic_a, ic_b = self._grow_to_specialization(
-            eco, box, name_a, name_b, ic_a, ic_b, autarky_a, autarky_b, eq
+        box, autarky_a, autarky_b, eq, ic_a, ic_b, cursors = self._grow_to_specialization(
+            eco, box, name_a, name_b, ic_a, ic_b, autarky_a, autarky_b, eq, cursors
         )
         self._specialization_box(
-            eco, box, name_a, name_b, autarky_a, autarky_b, eq, ic_a, ic_b
+            eco, box, name_a, name_b, autarky_a, autarky_b, eq, ic_a, ic_b, cursors
         )
 
     def _autarky_maps(self, eco):
@@ -68,25 +68,40 @@ class FullNarrative(_PersonStageMap):
         u_b = utility(*stage.consume_b, eco.alpha)
         ic_box = box.plot_ic_b_sw(u_b, eco.alpha, stroke_width=3.5)
         ic_box.set_stroke(color=grey_for_level(1.0))
+        # Pin ticks (and the dot) to the pre-shrink screen point for this bundle.
+        # always_redraw via axes.c2p drifts while NumberLines shorten; shared
+        # goods 2/4/6 stay put, so static ticks stay aligned with the dot.
+        bx, by = stage.consume_b
+        dot_pt = axes.c2p(bx, by)
+        self.remove(map_state["cursors"])
+        shrink_cursors = axes.cursor_ticks(bx, by, axes.color)
+        self.add(shrink_cursors)
+        dot.move_to(dot_pt)
+        self.bring_to_front(shrink_cursors, dot)
         axes.play_shrink_to(
             self,
             stage.total_x,
             stage.total_y,
             extra_anims=(
                 FadeOut(map_state["budget"]),
-                FadeOut(map_state["cursors"]),
                 ReplacementTransform(ivan_name, name_b),
                 ReplacementTransform(map_state["ic"], ic_box),
-                dot.animate.move_to(target),
             ),
             run_time=1.4,
         )
-        # Crossfade to the open box (no grey border yet — that arrives with Gonzalo).
-        # FadeIn revives child opacities, so hide Gonzalo again afterward — otherwise
-        # his SW "6" stacks on Iván's during the handoff.
-        self.play(FadeOut(axes), FadeIn(box), run_time=0.45)
+        # Crossfade to the open box — hand ticks off in the same beat so they
+        # never drop between the shrunk map and Iván's SW chart.
+        box_cursors = box.cursor_ticks_sw(*stage.consume_b)
+        self.play(
+            FadeOut(axes),
+            FadeIn(box),
+            ReplacementTransform(shrink_cursors, box_cursors),
+            dot.animate.move_to(target),
+            run_time=0.45,
+        )
         box.chrome_a.set_opacity(0)
-        _play_autarky_box(
+        self.bring_to_front(box_cursors, dot)
+        _, _, _, cursors = _play_autarky_box(
             self,
             eco,
             stage,
@@ -96,10 +111,11 @@ class FullNarrative(_PersonStageMap):
             intro="resume",
             existing_dot=dot,
             existing_ic=ic_box,
+            existing_cursors=box_cursors,
         )
-        return name_a, name_b, box, dot
+        return name_a, name_b, box, dot, cursors
 
-    def _exchange_box(self, eco, name_a, name_b, box_old, eq_old):
+    def _exchange_box(self, eco, name_a, name_b, box_old, eq_old, cursors):
         """Same SW/unit/totals as autarky end-frame; keep the box and green dot.
 
         Do not FadeTransform the box into a fresh copy: after Iván's rotate-in the
@@ -116,17 +132,20 @@ class FullNarrative(_PersonStageMap):
         ic_a0.set_stroke(color=ic_hi)
         ic_b0.set_stroke(color=ic_hi)
 
-        keep = {name_a, name_b, box, eq_old}
+        keep = {name_a, name_b, box, eq_old, cursors}
         extras = [m for m in list(self.mobjects) if m not in keep]
-        # Same green dot moves to the exchange endowment (never fades).
+        endow_cursors = box.cursor_ticks(*stage.produce_a)
+        # Same green dot + ticks move to the exchange endowment (never fade).
         self.play(
             *[FadeOut(m) for m in extras],
             FadeIn(ic_a0),
             FadeIn(ic_b0),
             eq_old.animate.move_to(box.c2p(*stage.produce_a)),
+            ReplacementTransform(cursors, endow_cursors),
             run_time=0.9,
         )
-        _, ic_a, ic_b = _play_endowment_trade(
+        self.bring_to_front(endow_cursors, eq_old)
+        _, ic_a, ic_b, trade_cursors = _play_endowment_trade(
             self,
             eco,
             stage,
@@ -135,14 +154,15 @@ class FullNarrative(_PersonStageMap):
             name_b,
             intro="after_endowment",
             endowment_arts=(ic_a0, ic_b0, eq_old),
+            existing_cursors=endow_cursors,
         )
         # Endowment ICs are the autarky optima (same bundles); kept dimmed as reference.
-        return box, ic_a, ic_b, ic_a0, ic_b0, eq_old
+        return box, ic_a, ic_b, ic_a0, ic_b0, eq_old, trade_cursors
 
     def _grow_to_specialization(
-        self, eco, box_old, name_a, name_b, ic_a, ic_b, autarky_a, autarky_b, eq
+        self, eco, box_old, name_a, name_b, ic_a, ic_b, autarky_a, autarky_b, eq, cursors
     ):
-        """Grow up/right from fixed SW; keep ICs through the green dot."""
+        """Grow up/right from fixed SW; keep ICs and cursor ticks through the green dot."""
         aut = eco.stage("autarky")
         ex = eco.stage("exchange")
         stage = eco.stage("specialization")
@@ -164,8 +184,9 @@ class FullNarrative(_PersonStageMap):
         ic_ex_b = box_new.plot_ic_b(u_ex_b, eco.alpha, stroke_width=3.5)
         ic_ex_a.set_stroke(color=ic_hi)
         ic_ex_b.set_stroke(color=ic_hi)
+        new_cursors = box_new.cursor_ticks(ox, oy)
 
-        keep = {name_a, name_b, box_old, autarky_a, autarky_b, eq, ic_a, ic_b}
+        keep = {name_a, name_b, box_old, autarky_a, autarky_b, eq, ic_a, ic_b, cursors}
         extras = [m for m in list(self.mobjects) if m not in keep]
         if extras:
             self.play(*[FadeOut(m) for m in extras], run_time=0.5)
@@ -177,15 +198,16 @@ class FullNarrative(_PersonStageMap):
                 (autarky_b, autarky_b_new),
                 (ic_a, ic_ex_a),
                 (ic_b, ic_ex_b),
+                (cursors, new_cursors),
             ),
             run_time=1.6,
         )
         eq.move_to(box_new.c2p(ox, oy))
-        self.bring_to_front(eq)
-        return box_new, autarky_a_new, autarky_b_new, eq, ic_ex_a, ic_ex_b
+        self.bring_to_front(new_cursors, eq)
+        return box_new, autarky_a_new, autarky_b_new, eq, ic_ex_a, ic_ex_b, new_cursors
 
     def _specialization_box(
-        self, eco, box, name_a, name_b, autarky_a, autarky_b, eq, ic_a, ic_b
+        self, eco, box, name_a, name_b, autarky_a, autarky_b, eq, ic_a, ic_b, cursors
     ):
         """Specialize to the NW corner → contract → trade.
 
@@ -200,6 +222,7 @@ class FullNarrative(_PersonStageMap):
         corner = stage.produce_a
 
         # Live-move to the true specialized corner; ICs shrink away and vanish.
+        # Old static ticks fade as live ticks take over with the green dot.
         _play_dot_ic_move(
             self,
             eco,
@@ -209,7 +232,7 @@ class FullNarrative(_PersonStageMap):
             corner,
             run_time=1.2,
             vanish_ics=True,
-            fade_out=(ic_a, ic_b),
+            fade_out=(ic_a, ic_b, cursors),
         )
 
         # Contract while parked at the corner (no endowment ICs); trade grows them.

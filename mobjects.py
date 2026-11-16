@@ -633,6 +633,24 @@ class EdgeworthBox(VGroup):
     def c2p(self, x: float, y: float):
         return self.axes_a.coords_to_point(x, y)
 
+    def cursor_ticks_sw(
+        self,
+        x: float,
+        y: float,
+        color=None,
+        *,
+        tick_size: float = TICK_SIZE * 1.75,
+        stroke_width: float = 4,
+    ) -> VGroup:
+        """Outward ticks on the SW axes only (Iván's chart before the NE rotate)."""
+        c = self.color_b if color is None else color
+        px = self.c2p(x, 0)
+        py = self.c2p(0, y)
+        return VGroup(
+            Line(px, px + DOWN * tick_size, color=c, stroke_width=stroke_width),
+            Line(py, py + LEFT * tick_size, color=c, stroke_width=stroke_width),
+        )
+
     def cursor_ticks(
         self,
         x: float,

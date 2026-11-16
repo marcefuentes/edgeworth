@@ -28,6 +28,8 @@ def allocation_dot(point, *, radius: float = 0.1) -> Dot:
     return Dot(point, color=DOT_COLOR, radius=radius).set_z_index(DOT_Z_INDEX)
 # Multiples of u_opt; stop at the optimum (never above).
 IC_LEVEL_FACTORS = (0.35, 0.55, 0.75, 0.90, 1.0)
+# Resting IC-family greys stay in a darker band so a lit curve can pop to full light.
+IC_FAMILY_GREY_MAX = 0.55
 
 
 def grey_for_level(t: float) -> str:
@@ -35,6 +37,11 @@ def grey_for_level(t: float) -> str:
     t = max(0.0, min(1.0, t))
     c = int(70 + t * (210 - 70))
     return f"#{c:02x}{c:02x}{c:02x}"
+
+
+def grey_for_ic_family(t: float) -> str:
+    """Resting indifference-curve family (darker than a green-dot highlight)."""
+    return grey_for_level(max(0.0, min(1.0, t)) * IC_FAMILY_GREY_MAX)
 
 
 def mono(

@@ -29,6 +29,7 @@ from style import (
     DOT_Z_INDEX,
     IC_LEVEL_FACTORS,
     allocation_dot,
+    grey_for_ic_family,
     grey_for_level,
     person_name,
     person_name_stacked,
@@ -119,19 +120,28 @@ class _PersonStageMap(Scene):
         existing_budget=None,
         existing_dot=None,
         existing_ic=None,
+        existing_cursors=None,
+        ic_family=None,
+        ic_levels=None,
     ):
-        """PPF + green dot (+ optional bare pass), then live ICs, then settle.
+        """PPF + green dot (+ optional bare pass), then ICs, then settle.
 
         ``existing_budget``: if set, keep that line (already morphed to this
         agent's PPF) and only introduce the cursors.
         ``existing_dot``: reuse the same green dot (move it; never fade it out).
         ``existing_ic``: IC already through the start bundle (e.g. after a
         handoff); faded when the live IC pass begins.
+        ``existing_cursors``: axis ticks already on the start bundle; swapped for
+        live cursors that follow the green dot (never a gap without ticks).
+        ``ic_family`` / ``ic_levels``: first complete B&F keeps the family and
+        lightens the highest curve the dot reaches; then a second B&F runs with
+        a single live IC (family fades as that pass starts), then settle.
         """
         u_opt = utility(*optimum, eco.alpha)
         t_lo, t_hi = 0.08, 0.92
         t_opt = max(t_lo, min(t_hi, optimum[0] / agent.a_x if agent.a_x else t_lo))
         tracker = ValueTracker(t_lo)
+        use_family = ic_family is not None and ic_levels is not None
 
         def _bundle():
             return ppf_point(agent.a_x, agent.a_y, tracker.get_value())
@@ -144,6 +154,21 @@ class _PersonStageMap(Scene):
             u = _u()
             t = 0.0 if u_opt <= u_corner else (u - u_corner) / (u_opt - u_corner + 1e-9)
             return grey_for_level(max(0.0, min(1.0, t)))
+
+        def _highlight_family(_mob=None):
+            u = _u()
+            active = 0
+            for i, ui in enumerate(ic_levels):
+                if ui <= u + 1e-9:
+                    active = i
+            u_lo_f, u_hi_f = ic_levels[0], ic_levels[-1]
+            for i, curve in enumerate(ic_family):
+                t = 0.0 if u_hi_f <= u_lo_f else (ic_levels[i] - u_lo_f) / (u_hi_f - u_lo_f)
+                if i == active:
+                    # Full light — family resting colors stay darker so this pops.
+                    curve.set_stroke(color=grey_for_level(1.0), width=3.5)
+                else:
+                    curve.set_stroke(color=grey_for_ic_family(t), width=3)
 
         budget = (
             existing_budget
@@ -158,7 +183,7 @@ class _PersonStageMap(Scene):
             dot = existing_dot
             dot.set_z_index(DOT_Z_INDEX)
             new_dot = False
-        # Cursor ticks match axis chrome (agent color), not the green dot.
+        # Cursor ticks match axis chrome (agent color) and always follow the dot.
         axes.color = agent.color
         cursors = always_redraw(
             lambda: axes.cursor_ticks(*_bundle(), agent.color)
@@ -170,23 +195,39 @@ class _PersonStageMap(Scene):
             intro.append(FadeIn(dot))
         else:
             intro.append(dot.animate.move_to(start))
-        intro.append(FadeIn(cursors))
-        self.play(*intro)
-        self.bring_to_front(dot)
+        if existing_cursors is not None:
+            self.remove(existing_cursors)
+            self.add(cursors)
+        else:
+            intro.append(FadeIn(cursors))
+        if intro:
+            self.play(*intro)
+        self.bring_to_front(cursors, dot)
 
         dot.add_updater(lambda m: m.move_to(axes.c2p(*_bundle())))
 
-        if bare_pass:
+        if use_family:
+            # First complete B&F: family stays up; dot lights the highest curve reached.
+            _highlight_family()
+            ic_family.add_updater(_highlight_family)
+            self.bring_to_front(ic_family, cursors, dot)
+            self.play(tracker.animate.set_value(t_hi), run_time=2.0, rate_func=linear)
+            self.play(tracker.animate.set_value(t_lo), run_time=2.0, rate_func=linear)
+            ic_family.clear_updaters()
+
+        elif bare_pass:
             self.play(tracker.animate.set_value(t_hi), run_time=2.0, rate_func=linear)
             self.play(tracker.animate.set_value(t_lo), run_time=2.0, rate_func=linear)
 
+        # Second complete B&F with a single live IC (same as before), then settle.
         live_ic = always_redraw(
             lambda: axes.plot_ic(_u(), eco.alpha, _ic_color(), stroke_width=3)
         )
         self.add(live_ic)
         self.bring_to_front(live_ic, cursors, dot)
-        # One full PPF pass with the live IC, then settle on the optimum.
         first = [tracker.animate.set_value(t_hi)]
+        if use_family:
+            first.append(FadeOut(ic_family))
         if existing_ic is not None:
             first.append(FadeOut(existing_ic))
         self.play(*first, run_time=2.0, rate_func=linear)
@@ -206,7 +247,7 @@ class _PersonStageMap(Scene):
             run_time=0.5,
         )
         self.bring_to_front(final_ic, final_cursors, dot)
-        self.wait(1.2)
+        self.wait(2.2)
         return budget, final_ic, dot, final_cursors
 
     def _construct_autarky(self, eco, agent, stage, optimum, *, intro: str = "together"):
@@ -231,16 +272,23 @@ class _PersonStageMap(Scene):
         drawn = VGroup()
         for u in u_levels:
             t = (u - u_lo) / (u_hi - u_lo)
-            curve = axes.plot_ic(u, eco.alpha, grey_for_level(t), stroke_width=3)
+            curve = axes.plot_ic(u, eco.alpha, grey_for_ic_family(t), stroke_width=3)
             self.play(Write(curve), run_time=0.4)
             drawn.add(curve)
 
-        self.play(FadeOut(drawn), run_time=0.6)
-        self._play_ppf_optimum(axes, agent, optimum, eco, bare_pass=True)
+        self._play_ppf_optimum(
+            axes,
+            agent,
+            optimum,
+            eco,
+            bare_pass=True,
+            ic_family=drawn,
+            ic_levels=u_levels,
+        )
         self.wait(0.8)
 
     def _construct_paired_autarky_maps(self, eco):
-        """Shared prefs: Gonzalo ICs → Iván recolor → Gonzalo PPF → Iván PPF+ICs.
+        """Shared prefs: Gonzalo ICs → Iván recolor → Gonzalo PPF (family lit) → Iván.
 
         Returns map leftovers used to morph into the autarky Edgeworth box.
         """
@@ -260,7 +308,7 @@ class _PersonStageMap(Scene):
         drawn = VGroup()
         for u in u_levels:
             t = (u - u_lo) / (u_hi - u_lo)
-            curve = axes.plot_ic(u, eco.alpha, grey_for_level(t), stroke_width=3)
+            curve = axes.plot_ic(u, eco.alpha, grey_for_ic_family(t), stroke_width=3)
             self.play(Write(curve), run_time=0.4)
             drawn.add(curve)
         self.wait(2.5)
@@ -269,15 +317,19 @@ class _PersonStageMap(Scene):
         name = self._recolor_map_frame(axes, name, agent_b, stacked=True)
         self.wait(2.5)
 
-        # --- 3) Back to Gonzalo; clear ICs; PPF with bare pass then live ICs ---
+        # --- 3) Back to Gonzalo; PPF with IC family lit by the green dot ---
         name = self._recolor_map_frame(axes, name, agent_a)
-        self.play(FadeOut(drawn), run_time=0.6)
         budget_a, final_ic_a, dot, final_cursors_a = self._play_ppf_optimum(
-            axes, agent_a, opt_a, eco, bare_pass=True
+            axes,
+            agent_a,
+            opt_a,
+            eco,
+            bare_pass=True,
+            ic_family=drawn,
+            ic_levels=u_levels,
         )
 
         # --- 4) Morph Gonzalo's PPF → Iván's; move the green dot with a live IC ---
-        self.play(FadeOut(final_cursors_a), run_time=0.35)
         budget_b = axes.ppf_line(agent_b.a_x, agent_b.a_y, color=PPF_COLOR)
         new_name = self._agent_name(agent_b, stacked=True)
         axes.color = agent_b.color
@@ -307,11 +359,16 @@ class _PersonStageMap(Scene):
             )
 
         live_handoff = always_redraw(_handoff_ic)
+        # Cursor ticks track the green dot for the whole handoff (never drop them).
+        self.remove(final_cursors_a)
+        handoff_cursors = always_redraw(
+            lambda: axes.cursor_ticks(*_handoff_bundle(), agent_b.color)
+        )
         dot.clear_updaters()
         dot.set_z_index(DOT_Z_INDEX)
         dot.add_updater(lambda m: m.move_to(axes.c2p(*_handoff_bundle())))
-        self.add(live_handoff)
-        self.bring_to_front(live_handoff, dot)
+        self.add(live_handoff, handoff_cursors)
+        self.bring_to_front(live_handoff, handoff_cursors, dot)
         new_name.set_opacity(0)
         self.add(new_name)
         self.play(
@@ -329,9 +386,11 @@ class _PersonStageMap(Scene):
         handoff_ic = axes.plot_ic(
             max(u_hi, EPS), eco.alpha, grey_for_level(1.0), stroke_width=3.5
         )
-        self.add(handoff_ic)
-        self.bring_to_front(handoff_ic, dot)
-        self.remove(live_handoff)
+        # Freeze cursors at the handoff end; Iván's PPF beat reuses them via existing.
+        end_cursors = axes.cursor_ticks(*end_bundle, agent_b.color)
+        self.add(handoff_ic, end_cursors)
+        self.bring_to_front(handoff_ic, end_cursors, dot)
+        self.remove(live_handoff, handoff_cursors)
         name = new_name
         budget_b, final_ic, final_dot, final_cursors = self._play_ppf_optimum(
             axes,
@@ -342,6 +401,7 @@ class _PersonStageMap(Scene):
             existing_budget=budget_b,
             existing_dot=dot,
             existing_ic=handoff_ic,
+            existing_cursors=end_cursors,
         )
         self.wait(0.5)
         return {

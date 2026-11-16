@@ -181,7 +181,7 @@ def _play_dot_ic_move(
         # True corner: ICs (and cursors) gone until trade leaves the axes.
         scene.remove(live_a, live_b, cursors)
         scene.bring_to_front(eq)
-        return None, None
+        return None, None, None
 
     if not settle:
         return live_a, live_b, cursors
@@ -195,7 +195,7 @@ def _play_dot_ic_move(
     scene.add(ic_a, ic_b, final_cursors)
     scene.bring_to_front(ic_a, ic_b, final_cursors, eq)
     scene.remove(live_a, live_b, cursors)
-    return ic_a, ic_b
+    return ic_a, ic_b, final_cursors
 
 
 def _play_endowment_trade(
@@ -212,6 +212,7 @@ def _play_endowment_trade(
     lens_utilities: tuple[float, float] | None = None,
     retain_endowment_ics: bool = True,
     skip_endowment_ics: bool = False,
+    existing_cursors=None,
 ) -> EdgeworthBox:
     """Shared Exchange/Specialization beat: endowment → contract → trade move.
 
@@ -281,6 +282,16 @@ def _play_endowment_trade(
             scene.play(*anims)
         scene.wait(0.4)
 
+    # Axis ticks at the green dot while it sits through the contract beat.
+    endow_cursors = None
+    if existing_cursors is not None:
+        endow_cursors = existing_cursors
+        scene.bring_to_front(endow_cursors, eq)
+    elif not skip_endowment_ics:
+        endow_cursors = box.cursor_ticks(*endow)
+        scene.add(endow_cursors)
+        scene.bring_to_front(endow_cursors, eq)
+
     # Lens uses a drawable stand-in when the true endowment is on the axes.
     lens_endow = (
         _away_from_axes(endow, stage.total_x, stage.total_y)
@@ -318,7 +329,10 @@ def _play_endowment_trade(
         else:
             fade_out = (ic_a0, ic_b0)
 
-    ic_a1, ic_b1 = _play_dot_ic_move(
+    if endow_cursors is not None:
+        scene.remove(endow_cursors)
+
+    ic_a1, ic_b1, cursors = _play_dot_ic_move(
         scene,
         eco,
         box,
@@ -330,7 +344,7 @@ def _play_endowment_trade(
         fade_out=fade_out,
     )
     scene.wait(2)
-    return box, ic_a1, ic_b1
+    return box, ic_a1, ic_b1, cursors
 
 
 def _play_autarky_box(
@@ -344,10 +358,11 @@ def _play_autarky_box(
     intro: str = "together",
     existing_dot=None,
     existing_ic=None,
+    existing_cursors=None,
 ) -> tuple:
     """Iván SW chart → rotate into NE corner → Gonzalo ICs → shared optimum.
 
-    Returns ``(eq, ic_a, ic_b)`` at the final shared endowment frame.
+    Returns ``(eq, ic_a, ic_b, cursors)`` at the final shared endowment frame.
     """
     # Dot starts on Iván's SW chart at his optimum; 180° rotation lands it
     # on the final Edgeworth allocation (consume_a).
@@ -374,7 +389,14 @@ def _play_autarky_box(
     ]
     if existing_dot is None:
         focus.append(FadeIn(eq))
+    # SW cursor ticks track the green dot from Iván's open through the rotate.
+    if existing_cursors is not None:
+        cursors = existing_cursors
+    else:
+        cursors = box.cursor_ticks_sw(*stage.consume_b)
+        focus.append(FadeIn(cursors))
     scene.play(*focus, run_time=0.5)
+    scene.bring_to_front(cursors, eq)
     scene.wait(0.4)
 
     if existing_ic is not None:
@@ -389,27 +411,32 @@ def _play_autarky_box(
             curve = box.plot_ic_b_sw(u, eco.alpha, stroke_width=3)
             curve.set_stroke(color=grey_for_level(t))
             scene.play(Write(curve), run_time=0.4)
-            scene.bring_to_front(eq)
+            scene.bring_to_front(cursors, eq)
             drawn_b.add(curve)
         opt_b = drawn_b[-1]
         lower_b = VGroup(*drawn_b[:-1])
         scene.play(FadeOut(lower_b), opt_b.animate.set_stroke(width=3.5), run_time=0.6)
-        scene.bring_to_front(eq)
+        scene.bring_to_front(cursors, eq)
 
     # Drop Gonzalo before the rotate so dimmed SW axes don't close a faint
     # empty rectangle once Iván reaches NE; he returns on his focus beat.
     box.chrome_a.set_opacity(0)
-    # Rotate Iván's axes + optimum IC + dot into the NE Edgeworth corner
-    box.play_rotate_b_into_box(scene, eq, opt_b, run_time=2.5)
+    # Rotate Iván's axes + optimum IC + cursors + dot into the NE corner
+    box.play_rotate_b_into_box(scene, eq, opt_b, cursors, run_time=2.5)
     eq.move_to(box.c2p(*stage.consume_a))
-    scene.bring_to_front(eq)
+    # Full-box ticks at the shared allocation (A SW + B NE).
+    final_cursors = box.cursor_ticks(*stage.consume_a)
+    scene.remove(cursors)
+    scene.add(final_cursors)
+    cursors = final_cursors
+    scene.bring_to_front(cursors, eq)
     # Snap IC to exact Edgeworth geometry after the rotate.
     final_b = box.plot_ic_b(u_b, eco.alpha, stroke_width=3.5)
     final_b.set_stroke(color=opt_b.get_stroke_color())
     scene.remove(opt_b)
     scene.add(final_b)
     opt_b = final_b
-    scene.bring_to_front(eq)
+    scene.bring_to_front(cursors, eq)
 
     # Focus Gonzalo: dim Iván; attach Gonzalo's SW axes (box completes) + name.
     scene.play(
@@ -419,6 +446,7 @@ def _play_autarky_box(
         FadeIn(name_a),
         run_time=0.5,
     )
+    scene.bring_to_front(cursors, eq)
 
     # --- Gonzalo (agent A): ICs up to optimum, then keep only that curve ---
     levels_a = _ic_levels(u_a)
@@ -428,12 +456,12 @@ def _play_autarky_box(
         curve = box.plot_ic_a(u, eco.alpha, stroke_width=3)
         curve.set_stroke(color=grey_for_level(t))
         scene.play(Write(curve), run_time=0.4)
-        scene.bring_to_front(eq)
+        scene.bring_to_front(cursors, eq)
         drawn_a.add(curve)
     opt_a = drawn_a[-1]
     lower_a = VGroup(*drawn_a[:-1])
     scene.play(FadeOut(lower_a), opt_a.animate.set_stroke(width=3.5), run_time=0.6)
-    scene.bring_to_front(eq)
+    scene.bring_to_front(cursors, eq)
 
     # Restore both agents (green dot already sits at the shared optimum)
     scene.play(
@@ -443,8 +471,9 @@ def _play_autarky_box(
         name_b.animate.set_opacity(1),
         run_time=0.45,
     )
+    scene.bring_to_front(cursors, eq)
     scene.wait(2)
-    return eq, opt_a, opt_b
+    return eq, opt_a, opt_b, cursors
 
 
 class AutarkyBox(Scene):
